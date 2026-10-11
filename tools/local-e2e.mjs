@@ -219,6 +219,8 @@ const env = {
   FREEBUFF_ISSUER: ISSUER,
   FREEBUFF_CLIENT_ID: CLIENT_ID,
   APP_ORIGIN,
+  // The mock provider always issues joanna@example.com, so she is the admin.
+  ADMIN_EMAILS: "joanna@example.com",
   ASSETS: { fetch: assetsFetch },
   VIDEOS: makeR2Bucket(),
 };
@@ -275,8 +277,27 @@ console.log("\n— Static pages —");
 
 console.log("\n— Auth guards —");
 {
+  // Listing endpoints are public: the Video Library and Heads & Mistress
+  // pages are visitor-facing and must work signed-out.
   const videos = await call("/api/videos");
-  check("GET /api/videos unauthenticated → 401", videos.status === 401, `status ${videos.status}`);
+  check("GET /api/videos unauthenticated → 200", videos.status === 200, `status ${videos.status}`);
+  check("unauthenticated videos is a JSON array", Array.isArray(await videos.json()));
+
+  const images = await call("/api/images");
+  check("GET /api/images unauthenticated → 200", images.status === 200, `status ${images.status}`);
+
+  // Mutations and account routes stay locked down.
+  const up = await call("/api/upload/video", { method: "POST" });
+  check("POST /api/upload/video unauthenticated → 401", up.status === 401, `status ${up.status}`);
+
+  const addLink = await call("/api/videos/link", {
+    method: "POST",
+    body: JSON.stringify({ url: "https://example.com/v.mp4", title: "x" }),
+  });
+  check("POST /api/videos/link unauthenticated → 401", addLink.status === 401, `status ${addLink.status}`);
+
+  const del = await call("/api/videos/whatever", { method: "DELETE" });
+  check("DELETE /api/videos/<key> unauthenticated → 401", del.status === 401, `status ${del.status}`);
 
   const user = await call("/api/auth/user");
   check("GET /api/auth/user unauthenticated → 401", user.status === 401, `status ${user.status}`);
@@ -513,6 +534,112 @@ console.log("\n— Security —");
     })(),
   });
   check("non-video file rejected → 400", notVideo.status === 400, `status ${notVideo.status}`);
+
+  // ---- Baseline security headers on every response ----
+  const home = await call("/");
+  check("nosniff header set", home.headers.get("X-Content-Type-Options") === "nosniff");
+  check("X-Frame-Options: DENY", home.headers.get("X-Frame-Options") === "DENY");
+  check("Referrer-Policy set", !!home.headers.get("Referrer-Policy"));
+  const csp = home.headers.get("Content-Security-Policy") || "";
+  check("CSP set", csp.length > 0);
+  check("CSP blocks object-src", csp.includes("object-src 'none'"));
+  check("CSP sets frame-ancestors", csp.includes("frame-ancestors 'none'"));
+  const api401 = await call("/api/auth/user");
+  check("security headers on API errors too", api401.headers.get("X-Content-Type-Options") === "nosniff");
+
+  // ---- Admin allowlist: a session that is not on ADMIN_EMAILS is refused ----
+  const originalAllowlist = env.ADMIN_EMAILS;
+  env.ADMIN_EMAILS = "someone-else@example.com";
+
+  const deniedLink = await call("/api/videos/link", {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ title: "X", category: "X", url: "https://example.com/a.mp4" }),
+  });
+  check("non-admin link add → 403", deniedLink.status === 403, `status ${deniedLink.status}`);
+
+  const deniedUpload = await call("/api/upload/video", {
+    method: "POST",
+    headers: authHeaders,
+    body: (() => {
+      const fd = new FormData();
+      fd.append("video", new File([new Uint8Array(4)], "x.mp4", { type: "video/mp4" }));
+      fd.append("category", "X");
+      return fd;
+    })(),
+  });
+  check("non-admin upload → 403", deniedUpload.status === 403, `status ${deniedUpload.status}`);
+
+  const deniedDelete = await call("/api/videos/whatever", {
+    method: "DELETE",
+    headers: authHeaders,
+  });
+  check("non-admin delete → 403", deniedDelete.status === 403, `status ${deniedDelete.status}`);
+
+  // ---- Unconfigured allowlist allows any authenticated user (fail-open) ----
+  env.ADMIN_EMAILS = "";
+  const unconfigured = await call("/api/videos/link", {
+    method: "POST",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ title: "X-unconf", category: "X", url: "https://example.com/a.mp4" }),
+  });
+  check("unconfigured ADMIN_EMAILS allows authenticated admin", unconfigured.status === 200, `status ${unconfigured.status}`);
+  // Clean up the link created in this case
+  if (unconfigured.status === 200) {
+    try {
+      const unconfBody = await unconfigured.json();
+      if (unconfBody.key) {
+        await call("/api/videos/" + encodeURIComponent(unconfBody.key), {
+          method: "DELETE",
+          headers: authHeaders,
+        });
+      }
+    } catch {}
+  }
+  env.ADMIN_EMAILS = originalAllowlist;
+
+  // ---- Upload extension is validated, not just the client MIME type ----
+  const spoofed = await call("/api/upload/video", {
+    method: "POST",
+    headers: authHeaders,
+    body: (() => {
+      const fd = new FormData();
+      // Claims video/mp4 but carries an executable-ish extension.
+      fd.append("video", new File([new Uint8Array(4)], "evil.html", { type: "video/mp4" }));
+      fd.append("category", "X");
+      return fd;
+    })(),
+  });
+  check("HTML extension rejected despite video/* MIME → 415", spoofed.status === 415, `status ${spoofed.status}`);
+
+  const spoofedImage = await call("/api/upload/image", {
+    method: "POST",
+    headers: authHeaders,
+    body: (() => {
+      const fd = new FormData();
+      fd.append("image", new File([new Uint8Array(4)], "evil.svg", { type: "image/png" }));
+      fd.append("type", "head");
+      return fd;
+    })(),
+  });
+  check("SVG extension rejected → 415", spoofedImage.status === 415, `status ${spoofedImage.status}`);
+
+  // ---- Delete is confined to its own namespace ----
+  const traversal = await call("/api/videos/..%2F..%2Findex.html", {
+    method: "DELETE",
+    headers: authHeaders,
+  });
+  check("delete with traversal rejected → 400", traversal.status === 400, `status ${traversal.status}`);
+
+  const crossNamespace = await call("/api/videos/..%2Fimages%2Fx.png", {
+    method: "DELETE",
+    headers: authHeaders,
+  });
+  check("delete across namespace rejected → 400", crossNamespace.status === 400, `status ${crossNamespace.status}`);
+
+  // ---- Streaming rejects traversal keys ----
+  const streamTraversal = await call("/videos/..%2F..%2Fsecret");
+  check("streaming traversal key → 404", streamTraversal.status === 404, `status ${streamTraversal.status}`);
 }
 
 console.log("\n— Deletes —");
@@ -549,6 +676,100 @@ console.log("\n— Logout —");
   const setCookie = out.headers.get("Set-Cookie") || "";
   check("logout → 302", out.status === 302, `status ${out.status}`);
   check("logout clears cookie", /__session=;/.test(setCookie) && /Max-Age=0/.test(setCookie), setCookie);
+}
+
+console.log("\n— Frontend upload contract —");
+{
+  // The worker suite above drives fetch() directly, so a bug in the browser
+  // helper would slip through entirely. Regression being guarded: apiFetch
+  // used to force `Content-Type: application/json` on EVERY request,
+  // including FormData uploads. The browser must generate the
+  // `multipart/form-data; boundary=...` header itself, so forcing JSON made
+  // the worker's formData() throw — breaking both upload forms while the
+  // JSON-only "add by link" form kept working.
+  //
+  // Rather than pattern-match the source, execute apiFetch against a stubbed
+  // fetch and assert what it actually sends.
+  const mainSrc = await readFile(join(PUBLIC_DIR, "js", "main.js"), "utf8");
+
+  const captured = [];
+  const stubFetch = async (url, init) => {
+    captured.push({ url, init });
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  const { apiFetch } = new Function("fetch", `${mainSrc}\nreturn { apiFetch };`)(stubFetch);
+
+  // Read a header defensively: a buggy apiFetch may hand fetch() a plain
+  // object literal instead of a Headers instance. Normalise rather than
+  // throwing, so a regression fails this assertion instead of crashing the
+  // whole run with a TypeError.
+  function readHeader(init, name) {
+    const h = init?.headers;
+    if (!h) return undefined;
+    if (typeof h.get === "function") return h.get(name);
+    if (Array.isArray(h)) {
+      const hit = h.find(([k]) => String(k).toLowerCase() === name.toLowerCase());
+      return hit ? hit[1] : undefined;
+    }
+    for (const k of Object.keys(h)) {
+      if (k.toLowerCase() === name.toLowerCase()) return h[k];
+    }
+    return undefined;
+  }
+
+  function isHeadersInstance(init) {
+    return typeof init?.headers?.get === "function";
+  }
+
+  // 1. A FormData upload must NOT get a forced Content-Type, and must be
+  //    handed to fetch as a proper Headers object.
+  const fd = new FormData();
+  fd.append("video", new File([new Uint8Array(4)], "x.mp4", { type: "video/mp4" }));
+  await apiFetch("/api/upload/video", { method: "POST", body: fd });
+  const uploadInit = captured[0].init;
+  const uploadCT = readHeader(uploadInit, "Content-Type");
+  check(
+    "apiFetch passes a Headers instance to fetch",
+    isHeadersInstance(uploadInit),
+    `got ${Object.prototype.toString.call(uploadInit?.headers)}`
+  );
+  check(
+    "FormData upload sends no forced Content-Type",
+    uploadCT == null,
+    `got ${JSON.stringify(uploadCT)}`
+  );
+  check("FormData body forwarded intact", uploadInit.body === fd);
+
+  // 2. A JSON body must still get application/json (the link form relies on it).
+  captured.length = 0;
+  await apiFetch("/api/videos/link", {
+    method: "POST",
+    body: JSON.stringify({ title: "t", url: "https://example.com/a.mp4" }),
+  });
+  const jsonCT = readHeader(captured[0].init, "Content-Type");
+  check(
+    "JSON body still gets application/json",
+    jsonCT === "application/json",
+    `got ${JSON.stringify(jsonCT)}`
+  );
+
+  // 3. An explicit caller-supplied Content-Type must not be clobbered.
+  captured.length = 0;
+  await apiFetch("/api/thing", {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: "raw",
+  });
+  const callerCT = readHeader(captured[0].init, "Content-Type");
+  check(
+    "caller-supplied Content-Type preserved",
+    callerCT === "text/plain",
+    `got ${JSON.stringify(callerCT)}`
+  );
 }
 
 console.log(`\n${failed === 0 ? "ALL PASSED" : "FAILURES"}: ${passed} passed, ${failed} failed`);

@@ -2880,6 +2880,49 @@ var LOGOUT_PATH = "/auth/freebuff/logout";
 var SIGNIN_PATH = "/auth/freebuff/signin";
 var MAX_VIDEO_BYTES = 80 * 1024 * 1024;
 var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+function adminEmails(env) {
+  return String(env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+}
+function isAdmin(session, env) {
+  const emails = adminEmails(env);
+  if (emails.length === 0) return true;
+  return emails.includes(String(session?.email || "").toLowerCase());
+}
+var VIDEO_EXTENSIONS = /* @__PURE__ */ new Set(["mp4", "webm", "mov", "m4v", "ogv"]);
+var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["jpg", "jpeg", "png", "webp", "gif", "avif"]);
+function safeExtension(originalName) {
+  const ext = originalName.includes(".") ? originalName.split(".").pop().toLowerCase() : "";
+  return /^[a-z0-9]{1,8}$/.test(ext) ? ext : "";
+}
+var CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com",
+  "img-src 'self' data:",
+  "media-src 'self'",
+  "frame-src https://www.youtube-nocookie.com",
+  "connect-src 'self'"
+].join("; ");
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (!headers.has("Content-Security-Policy")) {
+    headers.set("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
 function json(body, status = 200, extraHeaders = {}) {
   const headers = new Headers({ "Content-Type": "application/json", ...extraHeaders });
   return new Response(JSON.stringify(body), { status, headers });
@@ -3088,10 +3131,9 @@ async function parseForm(request) {
   }
   return { fields, files };
 }
-async function storeInR2(bucket, prefix, originalName, body, contentType, customMetadata) {
-  const ext = originalName.includes(".") ? "." + originalName.split(".").pop().toLowerCase() : ".bin";
+async function storeInR2(bucket, prefix, ext, body, contentType, customMetadata) {
   const slug = crypto.randomUUID().slice(0, 8);
-  const key = `${prefix}${slug}${ext}`;
+  const key = `${prefix}${slug}.${ext}`;
   await bucket.put(key, body, { httpMetadata: { contentType }, customMetadata });
   return key;
 }
@@ -3109,12 +3151,22 @@ async function handleUploadVideo(request, env, appOrigin) {
       },
       413
     );
+  const ext = safeExtension(videoFile.name);
+  if (!VIDEO_EXTENSIONS.has(ext))
+    return json(
+      {
+        error: `Unsupported video file type. Allowed: ${[...VIDEO_EXTENSIONS].join(
+          ", "
+        )}`
+      },
+      415
+    );
   const key = await storeInR2(
     env.VIDEOS,
     "videos/",
-    videoFile.name,
+    ext,
     videoFile.body,
-    videoFile.type,
+    ext === "webm" ? "video/webm" : "video/mp4",
     { category, filename: videoFile.name }
   );
   return json({
@@ -3134,12 +3186,22 @@ async function handleUploadImage(request, env, appOrigin) {
     return json({ error: "That file is not an image" }, 400);
   if (imageFile.size > MAX_IMAGE_BYTES)
     return json({ error: "Image is larger than the 10 MB limit" }, 413);
+  const ext = safeExtension(imageFile.name);
+  if (!IMAGE_EXTENSIONS.has(ext))
+    return json(
+      {
+        error: `Unsupported image file type. Allowed: ${[...IMAGE_EXTENSIONS].join(
+          ", "
+        )}`
+      },
+      415
+    );
   const key = await storeInR2(
     env.VIDEOS,
     "images/",
-    imageFile.name,
+    ext,
     imageFile.body,
-    imageFile.type,
+    `image/${ext === "jpg" ? "jpeg" : ext}`,
     { type, filename: imageFile.name }
   );
   return json({
@@ -3229,9 +3291,11 @@ async function handleListImages(env, appOrigin) {
   return json(entries);
 }
 function normalizeKey(rawPath) {
-  return decodeURIComponent(rawPath).replace(/^\/+/, "");
+  const key = decodeURIComponent(rawPath).replace(/^\/+/, "");
+  if (key.includes("..")) return null;
+  return key;
 }
-async function handleDeleteMedia(env, rawKey2) {
+async function handleDeleteMedia(env, rawKey2, requiredPrefix) {
   let key;
   try {
     key = decodeURIComponent(rawKey2).replace(/^\/+/, "");
@@ -3239,14 +3303,21 @@ async function handleDeleteMedia(env, rawKey2) {
     return json({ error: "Malformed key" }, 400);
   }
   if (!key) return json({ error: "Missing key" }, 400);
+  if (requiredPrefix) {
+    if (key.includes("..") || !key.startsWith(requiredPrefix)) {
+      return json({ error: "Invalid key" }, 400);
+    }
+  }
   await env.VIDEOS.delete(key);
   return json({ success: true });
 }
 async function streamFromR2(request, bucket, key, fallbackType) {
   try {
+    const normalized = normalizeKey(key);
+    if (!normalized) return new Response("Not found", { status: 404 });
     const rangeHeader = request.headers.get("Range");
     const opts = rangeHeader ? { range: request.headers } : void 0;
-    const object = await bucket.get(normalizeKey(key), opts);
+    const object = await bucket.get(normalized, opts);
     if (!object) return new Response("Not found", { status: 404 });
     const headers = new Headers();
     object.writeHttpMetadata(headers);
@@ -3294,17 +3365,35 @@ async function handleRequest(request, env, ctx) {
     }
     return json({ error: "Not found" }, 404);
   }
+  const PUBLIC_GETS = /* @__PURE__ */ new Set(["/api/videos", "/api/images"]);
+  const isPublicRead = PUBLIC_GETS.has(url.pathname) && request.method === "GET";
+  const path = url.pathname;
+  const isAdminOnly = path === "/api/upload/video" && request.method === "POST" || path === "/api/upload/image" && request.method === "POST" || path === "/api/videos/link" && request.method === "POST" || path.startsWith("/api/videos/") && request.method === "DELETE" || path.startsWith("/api/images/") && request.method === "DELETE";
+  let session = null;
   if (url.pathname.startsWith("/api/")) {
-    const session = await getSession(request, clientId, issuer);
-    if (!session) {
-      return json({ error: "Unauthorized" }, 401, { "Cache-Control": "no-store" });
+    if (!isPublicRead) {
+      session = await getSession(request, clientId, issuer);
+      if (!session) {
+        return json({ error: "Unauthorized" }, 401, { "Cache-Control": "no-store" });
+      }
+      if (!isSameOriginRequest(request, appOrigin)) {
+        return json({ error: "Forbidden" }, 403);
+      }
     }
-    if (!isSameOriginRequest(request, appOrigin)) {
-      return json({ error: "Forbidden" }, 403);
+    if (isAdminOnly && !isAdmin(session, env)) {
+      return json(
+        { error: "Forbidden \u2014 admin access required" },
+        403,
+        { "Cache-Control": "no-store" }
+      );
     }
     if (url.pathname === "/api/auth/user" && request.method === "GET") {
+      const session2 = await getSession(request, clientId, issuer);
+      if (!session2) {
+        return json({ error: "Unauthorized" }, 401, { "Cache-Control": "no-store" });
+      }
       return json(
-        { sub: session.sub, email: session.email, name: session.name },
+        { sub: session2.sub, email: session2.email, name: session2.name },
         200,
         { "Cache-Control": "private, no-store" }
       );
@@ -3328,10 +3417,18 @@ async function handleRequest(request, env, ctx) {
       return handleListImages(env, appOrigin);
     }
     if (url.pathname.startsWith("/api/videos/") && request.method === "DELETE") {
-      return handleDeleteMedia(env, url.pathname.slice("/api/videos/".length));
+      return handleDeleteMedia(
+        env,
+        url.pathname.slice("/api/videos/".length),
+        "videos/"
+      );
     }
     if (url.pathname.startsWith("/api/images/") && request.method === "DELETE") {
-      return handleDeleteMedia(env, url.pathname.slice("/api/images/".length));
+      return handleDeleteMedia(
+        env,
+        url.pathname.slice("/api/images/".length),
+        "images/"
+      );
     }
     return json({ error: "Not found" }, 404);
   }
@@ -3347,7 +3444,11 @@ async function handleRequest(request, env, ctx) {
     return new Response("Not found", { status: 404 });
   }
 }
-var worker_default = { fetch: handleRequest };
+var worker_default = {
+  async fetch(request, env, ctx) {
+    return withSecurityHeaders(await handleRequest(request, env, ctx));
+  }
+};
 export {
   worker_default as default
 };

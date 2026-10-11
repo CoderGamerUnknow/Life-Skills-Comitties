@@ -16,11 +16,17 @@ function apiPath(path) {
 
 /** Fetch JSON from an API route, throwing on non-2xx. */
 async function apiFetch(path, options = {}) {
-  const res = await fetch(apiPath(path), {
-    headers: { "Content-Type": "application/json", ...options.headers },
-    ...options,
-    body: options.body instanceof FormData ? options.body : options.body,
-  });
+  const isFormUpload = options.body instanceof FormData;
+  const headers = new Headers(options.headers);
+
+  // For a FormData upload the browser must generate the
+  // `multipart/form-data; boundary=...` header itself. Setting JSON here
+  // overrides that, and the server then refuses to parse the body.
+  if (!isFormUpload && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const res = await fetch(apiPath(path), { ...options, headers });
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
     try {
@@ -60,43 +66,16 @@ function signOut() {
   });
 }
 
-/** Simple toast shown for a few seconds. */
+/** Simple toast shown for a few seconds. Styling lives in css/style.css. */
 function toast(message, type = "info") {
   const existing = document.querySelector(".toast-msg");
   if (existing) existing.remove();
 
   const el = document.createElement("div");
   el.className = "toast-msg toast-" + type;
+  el.setAttribute("role", "status");
   el.textContent = message;
   document.body.appendChild(el);
-
-  // style
-  const style = document.createElement("style");
-  style.textContent = `
-    .toast-msg {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #2b2b2b;
-      color: #fff;
-      padding: 10px 18px;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
-      z-index: 999;
-      max-width: 90vw;
-      text-align: center;
-      transition: opacity 0.25s, transform 0.25s;
-      opacity: 0;
-      pointer-events: none;
-    }
-    .toast-msg.toast-success { background: #3f7a4d; }
-    .toast-msg.toast-error { background: #a23b3b; }
-    .toast-msg.toast-info { background: #3a5a8c; }
-    .toast-msg.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  `;
-  document.head.appendChild(style);
 
   requestAnimationFrame(() => {
     el.classList.add("show");
