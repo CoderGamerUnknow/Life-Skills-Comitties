@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Library — Life Skills Committee</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <nav class="top-nav">
+    <div class="nav-brand">
+      <span class="brand-dot"></span>
+      Life Skills Committee
+    </div>
+    <div class="nav-links">
+      <a href="/" class="nav-link">Home</a>
+      <a href="about" class="nav-link">Heads & Mistress</a>
+      <a href="members" class="nav-link">Members</a>
+      <a href="videos" class="nav-link active">Video Library</a>
+      <a href="admin" class="nav-link admin-link">Admin</a>
+    </div>
+  </nav>
+
+  <main class="page-wrap">
+    <section class="section-inner">
+      <span class="eyebrow">Learn & Watch</span>
+      <h1 class="page-title">Video Library</h1>
+      <p class="page-intro">
+        Videos from our sessions, sorted by skill category. Pick a filter below
+        or watch them all.
+      </p>
+
+      <!-- Category filter chips -->
+      <div class="filter-bar" id="filter-bar">
+        <button class="filter-chip active" data-category="all">All</button>
+      </div>
+
+      <!-- Video grid -->
+      <div class="video-grid" id="video-grid">
+        <!-- cards injected by JS -->
+      </div>
+
+      <div class="empty-state" id="video-empty" hidden>
+        <p>No videos yet. Head to the Admin panel to upload the first one.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="section-inner footer-inner">
+      <p>Life Skills Committee &mdash; Building skills for life.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/videos.js"></script>
+</body>
+</html>

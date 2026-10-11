@@ -1,0 +1,30 @@
+{
+  "compatibilityDate": "2026-02-01",
+  "transference": true,
+  "assets": {
+    "directory": "public",
+    "notFound": "public/index.html"
+  },
+  "rules": [
+    {
+      "glob": "_headers",
+      "type": "text"
+    },
+    {
+      "glob": "*.html",
+      "type": "text"
+    },
+    {
+      "glob": "css/**/*.css",
+      "type": "text"
+    },
+    {
+      "glob": "js/**/*.js",
+      "type": "text"
+    },
+    {
+      "glob": "assets/images/**/*",
+      "type": "binary"
+    }
+  ]
+}

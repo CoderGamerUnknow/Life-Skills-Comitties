@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heads & Mistress — Life Skills Committee</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <nav class="top-nav">
+    <div class="nav-brand">
+      <span class="brand-dot"></span>
+      Life Skills Committee
+    </div>
+    <div class="nav-links">
+      <a href="/" class="nav-link">Home</a>
+      <a href="about" class="nav-link active">Heads & Mistress</a>
+      <a href="members" class="nav-link">Members</a>
+      <a href="videos" class="nav-link">Video Library</a>
+      <a href="admin" class="nav-link admin-link">Admin</a>
+    </div>
+  </nav>
+
+  <main class="page-wrap">
+    <section class="section-inner">
+      <span class="eyebrow">Leadership</span>
+      <h1 class="page-title">Heads & Mistress</h1>
+      <p class="page-intro">
+        The people guiding the Life Skills Committee — responsible for planning,
+        mentoring members, and making sure every session is a worthwhile one.
+      </p>
+
+      <div class="team-grid" id="team-grid">
+        <!-- Cards injected by JS; images loaded from /api/images -->
+      </div>
+
+      <div class="empty-state" id="team-empty" hidden>
+        <p>No images uploaded yet. Head to the Admin panel to add photos.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="section-inner footer-inner">
+      <p>Life Skills Committee &mdash; Building skills for life.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/about.js"></script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Life Skills Committee</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <nav class="top-nav">
+    <div class="nav-brand">
+      <span class="brand-dot"></span>
+      Life Skills Committee
+    </div>
+    <div class="nav-links">
+      <a href="/" class="nav-link">Home</a>
+      <a href="about" class="nav-link">Heads & Mistress</a>
+      <a href="members" class="nav-link">Members</a>
+      <a href="videos" class="nav-link">Video Library</a>
+      <a href="admin" class="nav-link active admin-link">Admin</a>
+    </div>
+  </nav>
+
+  <main class="page-wrap">
+    <section class="section-inner admin-section">
+      <span class="eyebrow">Admin Panel</span>
+      <h1 class="page-title">Manage Content</h1>
+      <p class="page-intro">
+        Sign in to upload videos and photos. This area is locked to committee admins.
+      </p>
+
+      <!-- Auth status -->
+      <div class="auth-box" id="auth-box">
+        <div class="auth-status" id="auth-status">
+          <span class="status-badge status-pending">Checking sign-in…</span>
+        </div>
+        <div class="auth-actions" id="auth-actions">
+          <button class="btn btn-primary" id="sign-in-btn" hidden>
+            Sign in with Freebuff
+          </button>
+          <span class="status-badge status-signed-in" id="user-email" hidden></span>
+          <button class="btn btn-ghost" id="sign-out-btn" hidden>Sign out</button>
+        </div>
+      </div>
+
+      <div id="admin-content" hidden>
+
+      <!-- Upload panels -->
+      <div class="upload-panels">
+        <!-- Video upload -->
+        <div class="upload-panel">
+          <h2>Upload a Video</h2>
+          <p class="panel-desc">
+            Add a video file (up to ~80 MB) and assign it to a skill category.
+            Categories are created automatically as you type them. For longer
+            videos, use <strong>Add a Video by Link</strong> instead.
+          </p>
+          <form id="video-form" class="upload-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="video-file">Video file</label>
+                <input type="file" id="video-file" name="video" accept="video/*" required />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="video-category">Skill category</label>
+                <input
+                  type="text"
+                  id="video-category"
+                  name="category"
+                  placeholder="e.g. Communication, Leadership"
+                  required
+                />
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full" id="video-submit">
+              Upload Video
+            </button>
+            <div class="form-feedback" id="video-feedback" hidden></div>
+          </form>
+        </div>
+
+        <!-- Image upload for heads/mistress -->
+        <div class="upload-panel">
+          <h2>Upload a Photo</h2>
+          <p class="panel-desc">
+            Upload photos for the Heads and Mistress profile cards on the
+            Heads &amp; Mistress page. Choose whether the photo is for a Head
+            or the Mistress.
+          </p>
+          <form id="image-form" class="upload-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="image-file">Photo file</label>
+                <input type="file" id="image-file" name="image" accept="image/*" required />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="image-type">Photo type</label>
+                <select id="image-type" name="type">
+                  <option value="head">Head</option>
+                  <option value="mistress">Mistress</option>
+                </select>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full" id="image-submit">
+              Upload Photo
+            </button>
+            <div class="form-feedback" id="image-feedback" hidden></div>
+          </form>
+        </div>
+
+        <!-- Add video by link -->
+        <div class="upload-panel">
+          <h2>Add a Video by Link</h2>
+          <p class="panel-desc">
+            Paste a YouTube link or a direct video URL. Best for videos that are
+            too large to upload — link videos appear in the library alongside
+            uploaded files.
+          </p>
+          <form id="link-form" class="upload-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="link-title">Video title</label>
+                <input
+                  type="text"
+                  id="link-title"
+                  name="title"
+                  placeholder="e.g. Session 1 — Communication"
+                  required
+                />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="link-category">Skill category</label>
+                <input
+                  type="text"
+                  id="link-category"
+                  name="category"
+                  placeholder="e.g. Communication"
+                  required
+                />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="link-url">Video URL</label>
+                <input
+                  type="text"
+                  id="link-url"
+                  name="url"
+                  placeholder="https://youtu.be/… or https://…/clip.mp4"
+                  required
+                />
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full" id="link-submit">
+              Add Video Link
+            </button>
+            <div class="form-feedback" id="link-feedback" hidden></div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Currently uploaded content -->
+      <div class="upload-panels" id="media-panels">
+        <div class="upload-panel">
+          <h2>Photos on the Site</h2>
+          <p class="panel-desc">
+            These are the images currently available for the Heads &amp; Mistress
+            page. Use the Delete button to remove one — it will disappear from the
+            site immediately.
+          </p>
+          <div class="media-list" id="images-list">
+            <div class="empty-state">No photos uploaded yet.</div>
+          </div>
+        </div>
+
+        <div class="upload-panel">
+          <h2>Videos on the Site</h2>
+          <p class="panel-desc">
+            These are the videos currently in the library. Use the Delete button
+            to remove one — it will disappear from the Video Library immediately.
+          </p>
+          <div class="media-list" id="videos-list">
+            <div class="empty-state">No videos uploaded yet.</div>
+          </div>
+        </div>
+      </div>
+      </div><!-- /#admin-content -->
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="section-inner footer-inner">
+      <p>Life Skills Committee &mdash; Building skills for life.</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
