@@ -1,2 +1,10 @@
 node_modules/
 .freebuff/
+
+# Local dev servers (tools/dev-server.mjs, tools/local-api-server.mjs)
+.dev-data/
+dev-server.log
+
+# Local secrets (BLOB_READ_WRITE_TOKEN, ADMIN_PASSWORD) — never commit these
+.env.local
+.env*.local

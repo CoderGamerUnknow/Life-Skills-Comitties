@@ -1,6 +1,6 @@
 /**
  * Shared helpers used by all pages.
- * - signIn(): redirects to Freebuff auth.
+ * - signInWithPassword(): exchanges the admin passcode for a session cookie.
  * - getUser(): returns current user (or null) via the auth endpoint.
  * - signOut(): clears session and reloads.
  * - apiFetch(): thin wrapper around fetch that parses JSON and throws on errors.
@@ -35,7 +35,10 @@ async function apiFetch(path, options = {}) {
     } catch {
       // non-JSON error response
     }
-    throw new Error(msg);
+    const error = new Error(msg);
+    // Callers (e.g. the auth gate) branch on the status, so keep it around.
+    error.status = res.status;
+    throw error;
   }
   // Some endpoints return non-JSON (e.g. 204). Guard.
   const text = await res.text();
@@ -46,22 +49,24 @@ async function apiFetch(path, options = {}) {
 /** Read the current user, if any. Returns null when not signed in. */
 async function getUser() {
   try {
-    const user = await apiFetch("/api/auth/user", { method: "GET" });
+    const user = await apiFetch("/api/auth-user", { method: "GET" });
     return user || null;
   } catch {
     return null;
   }
 }
 
-/** Initiate Sign in with Freebuff. */
-function signIn() {
-  const authUrl = apiPath("/auth/freebuff");
-  window.location.href = authUrl;
+/** Sign in with the shared admin passcode (sets an HttpOnly session cookie). */
+async function signInWithPassword(password) {
+  return apiFetch("/api/auth-login", {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
 }
 
 /** Sign out and reload the page. */
 function signOut() {
-  fetch(apiPath("/auth/freebuff/logout"), { method: "POST" }).then(() => {
+  fetch(apiPath("/api/auth-logout"), { method: "POST" }).finally(() => {
     window.location.href = window.location.pathname;
   });
 }
@@ -98,11 +103,12 @@ async function applyAuthGate(statusEl, actionsEl) {
   actionsEl.hidden = true;
   statusEl.innerHTML = `<span class="status-badge status-pending">Checking sign-in…</span>`;
 
-  let user;
+  let user = null;
+  let error = null;
   try {
-    user = await getUser();
-  } catch {
-    user = null;
+    user = (await apiFetch("/api/auth-user", { method: "GET" })) || null;
+  } catch (err) {
+    error = err;
   }
 
   if (user) {
@@ -111,11 +117,19 @@ async function applyAuthGate(statusEl, actionsEl) {
     if (emailEl) emailEl.textContent = user.email || user.name || "admin";
     actionsEl.hidden = false;
     return true;
-  } else {
-    statusEl.innerHTML = `<span class="status-badge status-blocked">Not signed in — admin only.</span>`;
-    actionsEl.hidden = false;
+  }
+
+  // A 503 means the deployment is missing its admin passcode entirely — say that
+  // instead of implying the visitor simply is not signed in.
+  if (error && error.status === 503) {
+    statusEl.innerHTML = `<span class="status-badge status-blocked">${escapeHtml(error.message)}</span>`;
+    actionsEl.hidden = true;
     return false;
   }
+
+  statusEl.innerHTML = `<span class="status-badge status-blocked">Not signed in — admin only.</span>`;
+  actionsEl.hidden = false;
+  return false;
 }
 
 /** Minimal HTML escape. */

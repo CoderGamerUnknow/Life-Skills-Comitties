@@ -1021,6 +1021,23 @@ img {
   flex-wrap: wrap;
 }
 
+/* Passcode sign-in form inside the auth box */
+.login-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.login-form .form-group {
+  min-width: 220px;
+}
+
+.login-form .form-feedback {
+  flex-basis: 100%;
+  margin-top: 4px;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -1123,6 +1140,7 @@ img {
 
 .form-group input[type="text"],
 .form-group input[type="url"],
+.form-group input[type="password"],
 .form-group select {
   width: 100%;
   padding: 11px 13px;

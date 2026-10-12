@@ -33,7 +33,8 @@
       <span class="eyebrow">Admin Panel</span>
       <h1 class="page-title">Manage Content</h1>
       <p class="page-intro">
-        Sign in to upload videos and photos. This area is locked to committee admins.
+        Sign in with the committee passcode to upload videos and photos. This
+        area is locked to committee admins.
       </p>
 
       <!-- Auth status -->
@@ -42,9 +43,20 @@
           <span class="status-badge status-pending">Checking sign-in…</span>
         </div>
         <div class="auth-actions" id="auth-actions">
-          <button class="btn btn-primary" id="sign-in-btn" hidden>
-            Sign in with Freebuff
-          </button>
+          <form class="login-form" id="login-form">
+            <div class="form-group">
+              <label for="admin-password">Admin passcode</label>
+              <input
+                type="password"
+                id="admin-password"
+                name="password"
+                autocomplete="current-password"
+                required
+              />
+            </div>
+            <button type="submit" class="btn btn-primary" id="sign-in-btn">Sign in</button>
+            <div class="form-feedback" id="login-feedback" hidden></div>
+          </form>
           <span class="status-badge status-signed-in" id="user-email" hidden></span>
           <button class="btn btn-ghost" id="sign-out-btn" hidden>Sign out</button>
         </div>
@@ -58,9 +70,11 @@
         <div class="upload-panel">
           <h2>Upload a Video</h2>
           <p class="panel-desc">
-            Add a video file (up to ~80 MB) and assign it to a skill category.
-            Categories are created automatically as you type them. For longer
-            videos, use <strong>Add a Video by Link</strong> instead.
+            Add a video file (up to 200 MB, mp4/webm/mov) and assign it to a skill
+            category. Categories are created automatically as you type them.
+            Files upload straight from your browser, so large ones are fine — but
+            for long sessions, <strong>Add a Video by Link</strong> is cheaper
+            and starts playing faster.
           </p>
           <form id="video-form" class="upload-form">
             <div class="form-row">
@@ -92,9 +106,9 @@
         <div class="upload-panel">
           <h2>Upload a Photo</h2>
           <p class="panel-desc">
-            Upload photos for the Heads and Mistress profile cards on the
-            Heads &amp; Mistress page. Choose whether the photo is for a Head
-            or the Mistress.
+            Upload photos (up to 10 MB) for the Heads and Mistress profile cards
+            on the Heads &amp; Mistress page. Choose whether the photo is for a
+            Head or the Mistress.
           </p>
           <form id="image-form" class="upload-form">
             <div class="form-row">
@@ -208,6 +222,6 @@
   </footer>
 
   <script src="js/main.js"></script>
-  <script src="js/admin.js"></script>
+  <script type="module" src="js/admin.js"></script>
 </body>
 </html>
