@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Life Skills Committee — practical sessions on communication, leadership, teamwork and personal growth." />
   <title>Life Skills Committee</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -15,42 +22,87 @@
     </div>
     <div class="nav-links">
       <a href="/" class="nav-link active">Home</a>
-      <a href="about" class="nav-link">Heads & Mistress</a>
-      <a href="members" class="nav-link">Members</a>
-      <a href="videos" class="nav-link">Video Library</a>
-      <a href="admin" class="nav-link admin-link">Admin</a>
+      <a href="/about.html" class="nav-link">Heads &amp; Mistress</a>
+      <a href="/members.html" class="nav-link">Members</a>
+      <a href="/videos.html" class="nav-link">Video Library</a>
+      <a href="/admin.html" class="nav-link admin-link">Admin</a>
     </div>
   </nav>
 
-  <!-- Hero / intro -->
+  <!-- Hero -->
   <header class="hero">
-    <div class="hero-content">
-      <span class="eyebrow">Our Committee</span>
-      <h1>Life Skills Committee</h1>
-      <p class="hero-sub">
-        Equipping every member with the practical skills needed to thrive —
-        communication, leadership, teamwork, and personal growth.
-      </p>
-      <div class="hero-cta">
-        <a href="videos" class="btn btn-primary">Explore Videos</a>
-        <a href="about" class="btn btn-secondary">Meet the Team</a>
+    <div class="section-inner">
+      <div class="hero-inner">
+        <div class="hero-content">
+          <span class="eyebrow">Our Committee</span>
+          <h1>Skills that outlast the <em>classroom</em></h1>
+          <p class="hero-sub">
+            Weekly, hands-on sessions that turn everyday challenges into
+            strengths — communication, leadership, teamwork, and the confidence
+            to keep growing long after school.
+          </p>
+          <div class="hero-cta">
+            <a href="/videos.html" class="btn btn-primary">Explore Videos</a>
+            <a href="/about.html" class="btn btn-secondary">Meet the Team</a>
+          </div>
+          <p class="hero-leaders">
+            <span>Head</span>
+            <span class="leader-dot"></span>
+            <strong>Joanna</strong>
+            <span class="leader-dot"></span>
+            <span>Mistress</span>
+            <span class="leader-dot"></span>
+            <strong>Mrs Natasha Steve</strong>
+          </p>
+        </div>
+
+        <aside class="hero-panel" aria-label="Committee at a glance">
+          <div class="hero-panel-head">
+            <span>At a Glance</span>
+            <small>Session 2026</small>
+          </div>
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <b>4</b>
+              <span>Core skill tracks</span>
+            </div>
+            <div class="hero-stat">
+              <b>Weekly</b>
+              <span>Open sessions</span>
+            </div>
+            <div class="hero-stat">
+              <b>All</b>
+              <span>Year groups welcome</span>
+            </div>
+            <div class="hero-stat">
+              <b>Free</b>
+              <span>Always, for everyone</span>
+            </div>
+          </div>
+        </aside>
       </div>
-      <p class="hero-leaders">
-        Head &mdash; <strong>Joanna</strong> &nbsp;&middot;&nbsp; Mistress &mdash;
-        <strong>Mrs Natasha Steve</strong>
-      </p>
     </div>
-    <div class="hero-accent"></div>
   </header>
 
-  <!-- Goals section -->
+  <!-- Goals -->
   <section class="goals-section">
     <div class="section-inner">
-      <h2 class="section-title">Our Goals</h2>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">What we work on</span>
+          <h2 class="section-title">Four goals, every session</h2>
+        </div>
+        <p>
+          Each term is built around practical outcomes — not theory. Members
+          leave with something they can use the same week.
+        </p>
+      </div>
+
       <div class="goals-grid">
-        <div class="goal-card">
+        <article class="goal-card">
+          <span class="goal-num">01</span>
           <div class="goal-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 2L2 7l10 5 10-5-10-5z"/>
               <path d="M2 17l10 5 10-5"/>
               <path d="M2 12l10 5 10-5"/>
@@ -58,27 +110,31 @@
           </div>
           <h3>Build Practical Skills</h3>
           <p>
-            Offer structured sessions on communication, time management,
-            problem-solving, and decision-making that members can apply
-            in everyday life.
+            Structured sessions on communication, time management,
+            problem-solving and decision-making — skills members apply in
+            everyday life.
           </p>
-        </div>
-        <div class="goal-card">
+        </article>
+
+        <article class="goal-card">
+          <span class="goal-num">02</span>
           <div class="goal-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="8" r="4"/>
               <path d="M20 21a8 8 0 1 0-16 0"/>
             </svg>
           </div>
           <h3>Foster Leadership</h3>
           <p>
-            Encourage confidence, initiative, and responsibility through
-            hands-on activities and peer-led projects.
+            Confidence, initiative and responsibility, built through
+            hands-on activities and peer-led projects rather than lectures.
           </p>
-        </div>
-        <div class="goal-card">
+        </article>
+
+        <article class="goal-card">
+          <span class="goal-num">03</span>
           <div class="goal-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
               <circle cx="9" cy="7" r="4"/>
               <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
@@ -87,13 +143,15 @@
           </div>
           <h3>Strengthen Teamwork</h3>
           <p>
-            Create a supportive community where collaboration, empathy,
-            and respect are practiced in every session.
+            A supportive community where collaboration, empathy and respect
+            get practised out loud, in every single session.
           </p>
-        </div>
-        <div class="goal-card">
+        </article>
+
+        <article class="goal-card">
+          <span class="goal-num">04</span>
           <div class="goal-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 20V10"/>
               <path d="M18 20V4"/>
               <path d="M6 20v-4"/>
@@ -101,10 +159,10 @@
           </div>
           <h3>Inspire Lifelong Growth</h3>
           <p>
-            Instill a mindset of continuous learning so members keep
-            building on these skills long after the committee ends.
+            A mindset of continuous learning, so members keep building on
+            these skills long after the committee ends.
           </p>
-        </div>
+        </article>
       </div>
     </div>
   </section>
@@ -112,22 +170,30 @@
   <!-- Quick links -->
   <section class="links-section">
     <div class="section-inner">
-      <h2 class="section-title">What Would You Like to See?</h2>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Where to next</span>
+          <h2 class="section-title">What would you like to see?</h2>
+        </div>
+      </div>
       <div class="links-grid">
-        <a href="about" class="link-card">
+        <a href="/about.html" class="link-card">
           <span class="link-icon">👥</span>
-          <span class="link-label">Heads & Mistress</span>
+          <span class="link-label">Heads &amp; Mistress</span>
           <span class="link-desc">Meet the people leading the committee</span>
+          <span class="link-arrow" aria-hidden="true">→</span>
         </a>
-        <a href="members" class="link-card">
+        <a href="/members.html" class="link-card">
           <span class="link-icon">📋</span>
           <span class="link-label">Members</span>
           <span class="link-desc">The people who make it all happen</span>
+          <span class="link-arrow" aria-hidden="true">→</span>
         </a>
-        <a href="videos" class="link-card">
+        <a href="/videos.html" class="link-card">
           <span class="link-icon">🎬</span>
           <span class="link-label">Video Library</span>
-          <span class="link-desc">Watch and learn across different skill categories</span>
+          <span class="link-desc">Watch and learn across skill categories</span>
+          <span class="link-arrow" aria-hidden="true">→</span>
         </a>
       </div>
     </div>
@@ -135,7 +201,8 @@
 
   <footer class="site-footer">
     <div class="section-inner footer-inner">
-      <p>Life Skills Committee &mdash; Building skills for life.</p>
+      <p class="footer-brand">Life Skills Committee</p>
+      <p>Building skills for life.</p>
     </div>
   </footer>
 
