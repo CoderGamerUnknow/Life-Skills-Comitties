@@ -84,10 +84,11 @@ function toast(message, type = "info") {
 
   requestAnimationFrame(() => {
     el.classList.add("show");
+    el.classList.add("toast-visible");
   });
 
   setTimeout(() => {
-    el.classList.remove("show");
+    el.classList.remove("toast-visible");
     setTimeout(() => el.remove(), 300);
   }, 3200);
 }
