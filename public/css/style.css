@@ -198,22 +198,6 @@ img {
   font-weight: 600;
 }
 
-.admin-link {
-  margin-left: 10px;
-  padding-left: 22px;
-}
-
-.admin-link::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 1px;
-  height: 20px;
-  background: rgba(217, 164, 65, 0.35);
-}
-
 /* ============================================================
    Eyebrow + headings
    ============================================================ */
@@ -1160,6 +1144,24 @@ img {
   color: var(--text-on-dark);
 }
 
+/* Tiny admin/login entry, pinned to the very end of the footer. */
+.footer-admin {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-on-dark-mute);
+  opacity: 0.65;
+  transition: color 0.15s, opacity 0.15s;
+}
+
+.footer-admin:hover {
+  color: var(--brass);
+  opacity: 1;
+  text-decoration: none;
+}
+
 /* ============================================================
    Toast (injected by JS)
    ============================================================ */
@@ -1238,10 +1240,6 @@ img {
     padding: 6px 10px;
     font-size: 0.82rem;
     white-space: nowrap;
-  }
-
-  .admin-link {
-    display: none;
   }
 
   .page-wrap {
