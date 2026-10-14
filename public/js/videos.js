@@ -87,9 +87,13 @@ function renderVideos(videos) {
 
   if (empty) empty.hidden = true;
 
+  let delay = 0;
   for (const v of filtered) {
     const card = document.createElement("div");
     card.className = "video-card";
+    card.style.transitionDelay = `${delay}s`;
+    delay += 0.1;
+
 
     const thumb = document.createElement("div");
     thumb.className = "video-thumb";
