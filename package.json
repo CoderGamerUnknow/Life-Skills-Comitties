@@ -3,19 +3,18 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "node bundle.js",
-    "build:vendor": "node tools/build-vendor.mjs",
     "dev": "node tools/local-api-server.mjs",
-    "dev:worker": "node tools/dev-server.mjs",
-    "test": "node tools/local-e2e.mjs",
-    "test:api": "node tools/test-api.mjs"
+    "test": "node tools/test-api.mjs",
+    "test:api": "node tools/test-api.mjs",
+    "check:classes": "node tools/check-classes.mjs",
+    "build:vendor": "node tools/build-vendor.mjs"
   },
   "dependencies": {
-    "@freebuff/auth": "latest",
-    "@vercel/blob": "^2.8.1",
-    "hono": "^4.6.0",
-    "jose": "^6.2.12"
+    "@vercel/blob": "^2.8.1"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"

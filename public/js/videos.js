@@ -1,7 +1,7 @@
 /**
  * Videos page — list from /api/videos, filter by category chips.
  * Supports YouTube embeds (youtube.com/watch?v= or youtu.be/) and
- * direct R2-hosted video files (mp4/webm).
+ * direct video files hosted in the Vercel Blob store (mp4/webm).
  */
 
 const grid = document.getElementById("video-grid");

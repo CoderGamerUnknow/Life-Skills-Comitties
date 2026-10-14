@@ -1,10 +1,10 @@
 /**
  * Local stand-in for the Vercel project.
  *
- * Serves public/ exactly the way the deployed site does (including the
- * clean-path rewrites from vercel.json and the catch-all fallback), and mounts
- * every file in api/ under its real path so the handlers can be exercised with
- * genuine Request/Response objects.
+ * Serves public/ the way the deployed site does (including the clean-path
+ * rewrites from vercel.json and the public/404.html for unknown paths), and
+ * mounts every file in api/ under its real path so the handlers can be
+ * exercised with genuine Request/Response objects.
  *
  * With a blob token in .env.local this is a true end-to-end environment: the
  * browser uploads to the real store through the real API.
@@ -51,6 +51,7 @@ const CONTENT_TYPES = {
   ".avif": "image/avif",
   ".mp4": "video/mp4",
   ".webm": "video/webm",
+  ".txt": "text/plain; charset=utf-8",
 };
 
 /** Minimal .env.local loader (KEY=value per line, # comments, quoted values). */
@@ -102,10 +103,11 @@ async function serveStatic(pathname, response) {
     });
     response.end(body);
   } catch {
-    // The deployed site falls back to the home page for unknown paths.
+    // Match the deployed site: Vercel serves public/404.html with a 404 status
+    // for any path the rewrites above did not claim.
     try {
-      const body = await readFile(join(PUBLIC_DIR, "index.html"));
-      response.writeHead(200, { "Content-Type": CONTENT_TYPES[".html"] });
+      const body = await readFile(join(PUBLIC_DIR, "404.html"));
+      response.writeHead(404, { "Content-Type": CONTENT_TYPES[".html"] });
       response.end(body);
     } catch {
       response.writeHead(404).end("Not found");

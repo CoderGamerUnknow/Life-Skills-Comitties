@@ -1,31 +1,15 @@
 /**
  * POST /api/auth-login — exchange the shared admin passcode for a session cookie.
  * The cookie is HttpOnly, so the browser never sees (or needs) the passcode again.
+ *
+ * Failed attempts are throttled per client address. When Upstash Redis is
+ * configured the counter is shared across every serverless instance (see
+ * lib/ratelimit.js); otherwise a per-instance in-memory fallback is used.
  */
 
 import { adminConfigured, issueSession, passcodeMatches, sessionCookie } from "../lib/auth.js";
 import { clientIp, fail, isSecureRequest, json, readJson } from "../lib/http.js";
-
-const WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 10;
-
-// Best-effort throttle. Lambda instances are recycled and not shared, so this
-// only slows an attacker down; it is not the only line of defence.
-const attempts = new Map();
-
-function throttled(ip) {
-  const entry = attempts.get(ip);
-  return Boolean(entry) && Date.now() - entry.first < WINDOW_MS && entry.count >= MAX_ATTEMPTS;
-}
-
-function recordFailure(ip) {
-  const entry = attempts.get(ip);
-  if (!entry || Date.now() - entry.first >= WINDOW_MS) {
-    attempts.set(ip, { first: Date.now(), count: 1 });
-    return;
-  }
-  entry.count += 1;
-}
+import { clearFailures, isThrottled, recordFailure } from "../lib/ratelimit.js";
 
 export default {
   async fetch(request) {
@@ -41,19 +25,22 @@ export default {
     }
 
     const ip = clientIp(request);
-    if (throttled(ip)) {
-      return fail(429, "Too many failed attempts. Please wait 15 minutes and try again.");
+    const throttle = await isThrottled(ip);
+    if (throttle.blocked) {
+      return fail(429, "Too many failed attempts. Please wait a few minutes and try again.", {
+        "Retry-After": String(throttle.retryAfterSeconds),
+      });
     }
 
     const body = await readJson(request);
     if (!body) return fail(400, "Invalid request body.");
 
     if (!(await passcodeMatches(body.password))) {
-      recordFailure(ip);
+      await recordFailure(ip);
       return fail(401, "That passcode is not correct.");
     }
 
-    attempts.delete(ip);
+    await clearFailures(ip);
     const token = await issueSession();
     return json({ success: true }, 200, {
       "Set-Cookie": sessionCookie(token, isSecureRequest(request)),

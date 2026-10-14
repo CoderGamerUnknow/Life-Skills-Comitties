@@ -7,6 +7,9 @@ videos. No code edits are needed to add content.
 - **Backend:** Vercel Functions in `api/`, shared code in `lib/`
 - **Storage:** one Vercel Blob store (videos and their records)
 - **Auth:** one shared admin passcode (`ADMIN_PASSWORD`) → signed session cookie
+  (signed with `SESSION_SECRET` when set, otherwise with the passcode)
+- **Throttling:** failed sign-ins are rate-limited per address, shared across
+  instances through Upstash Redis when configured (otherwise in-memory)
 
 ## Pages
 
@@ -25,10 +28,19 @@ videos. No code edits are needed to add content.
 2. **Set the passcode** — Vercel dashboard → project → *Settings* →
    *Environment Variables* → add `ADMIN_PASSWORD` with the passcode the
    committee will share. Pick something long; the sign-in page is public.
-3. **Redeploy** so the functions pick the variables up.
+3. **Set a session secret (recommended)** — add `SESSION_SECRET` with a long
+   random value (e.g. `openssl rand -hex 32`). It signs the session cookie, so
+   a stolen cookie cannot be used to guess the passcode offline. Without it the
+   passcode is used as the signing key.
+4. **Connect a shared rate-limit store (recommended)** — create a free Upstash
+   Redis database at [console.upstash.com](https://console.upstash.com) (or from
+   the Vercel Marketplace) and add its REST credentials as `UPSTASH_REDIS_REST_URL`
+   and `UPSTASH_REDIS_REST_TOKEN`. Sign-in throttling is then shared across every
+   function instance. Without it, throttling falls back to per-instance memory.
+5. **Redeploy** so the functions pick the variables up.
 
-Until both are set, the site works normally but `/admin` shows exactly what is
-missing instead of an upload form.
+Until the Blob store and passcode are set, the site works normally but `/admin`
+shows exactly what is missing instead of an upload form.
 
 ## Using the admin panel
 
@@ -46,10 +58,11 @@ exception and links (YouTube) as the default for long videos.
 ## Development
 
 ```bash
-npm install          # once
-npm run dev          # local server: real api/ handlers + public/  -> http://localhost:3000
-npm run test         # end-to-end suite for the Cloudflare worker (src/worker.js)
-npm run test:api     # suite for the Vercel backend (lib/ + api/)
+npm install            # once
+npm run dev            # local server: real api/ handlers + public/  -> http://localhost:3000
+npm run test           # backend suite: pure rules, handlers, browser upload contract
+npm run test:api       # alias for the same suite
+npm run check:classes  # every CSS class used in HTML/JS exists in style.css
 ```
 
 `npm run dev` serves `public/` and mounts every function in `api/` the way
@@ -58,9 +71,12 @@ Vercel does. Add a `.env.local` (git-ignored) to exercise real uploads locally:
 ```
 BLOB_READ_WRITE_TOKEN=vercel_blob_rw_…
 ADMIN_PASSWORD=whatever-you-like
+SESSION_SECRET=any-long-random-string       # optional; falls back to ADMIN_PASSWORD
+UPSTASH_REDIS_REST_URL=https://…upstash.io  # optional; enables shared throttling
+UPSTASH_REDIS_REST_TOKEN=…
 ```
 
-`npm run test:api` runs its pure and handler-level checks with or without those
+`npm run test` runs its pure and handler-level checks with or without those
 values, and additionally runs real-store integration checks when a token is
 available.
 
@@ -95,10 +111,17 @@ package: `npm run build:vendor`.
   categories survive.
 - **Sessions:** the passcode is never stored in the browser — only an
   `HttpOnly`, `SameSite=Lax` `__session` cookie holding `<issuedAt>.<hmac>`,
-  valid for 30 days. Mutating routes additionally require a same-origin request.
+  valid for 30 days. The HMAC is keyed on `SESSION_SECRET` when set, else the
+  passcode. Mutating routes additionally require a same-origin request.
+- **Rate limiting:** `lib/ratelimit.js` throttles failed sign-ins per address
+  (10 failures / 15 minutes) using a fixed window. With Upstash Redis configured
+  (`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`) the counter is shared
+  by every serverless instance via Upstash's REST API — no npm dependency. If the
+  store is unset or unreachable it falls back to a bounded, per-instance memory
+  map so sign-in keeps working.
 - **Caching:** public lists are served with `s-maxage=30` (one blob call per
   minute instead of one per page view); the admin panel asks for `?fresh=1` to
   always see the truth.
-- `src/worker.js` is the original single-file Cloudflare Worker (R2 + Freebuff
-  OIDC) for a Sites deploy. It still builds and passes `npm test`, but the
-  deployed site runs the Vercel functions above; the two are not interchangeable.
+- **Deploy target:** the Vercel functions in `api/` + `lib/` are the only
+  backend. `vercel.json` sets the hardening headers (CSP, HSTS, nosniff,
+  frame-ancestors), and `public/404.html` handles unknown paths.

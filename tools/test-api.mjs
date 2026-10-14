@@ -25,11 +25,20 @@ import {
   parseMediaPathname,
   toPublicVideo,
 } from "../lib/media.js";
-import { issueSession, isSignedIn, passcodeMatches, requireAdmin } from "../lib/auth.js";
+import { issueSession, isSignedIn, passcodeMatches, requireAdmin, sessionSecret } from "../lib/auth.js";
+import {
+  MAX_ATTEMPTS,
+  clearFailures,
+  isThrottled,
+  rateLimitConfigured,
+  recordFailure,
+} from "../lib/ratelimit.js";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const PUBLIC_DIR = join(ROOT, "public");
 await loadEnvFile(join(ROOT, ".env.local"));
 
 // Keep the real token aside: the tests below flip the "store is connected" state.
@@ -160,6 +169,24 @@ check(
 );
 check("isSignedIn() rejects a missing cookie", !(await isSignedIn(new Request("https://app.test/api/auth-user"))));
 
+// A dedicated SESSION_SECRET signs sessions instead of the passcode, so a
+// captured cookie cannot be used to brute-force a short passcode offline.
+check("sessionSecret() falls back to the passcode", sessionSecret() === PASSCODE);
+process.env.SESSION_SECRET = "dedicated-session-secret";
+check("sessionSecret() prefers SESSION_SECRET", sessionSecret() === "dedicated-session-secret");
+const secretToken = await issueSession();
+check(
+  "a SESSION_SECRET-signed session verifies",
+  await isSignedIn(
+    new Request("https://app.test/api/auth-user", {
+      headers: { Cookie: `__session=${secretToken}` },
+    })
+  )
+);
+check("a passcode-signed session stops verifying once SESSION_SECRET is set", !(await isSignedIn(signedInRequest)));
+delete process.env.SESSION_SECRET;
+check("the passcode fallback works again without SESSION_SECRET", await isSignedIn(signedInRequest));
+
 const crossOrigin = new Request("https://app.test/api/videos", {
   method: "POST",
   headers: { Origin: "https://evil.test", Host: "app.test", Cookie: `__session=${sessionToken}` },
@@ -172,6 +199,86 @@ check(
   "requireAdmin() explains a missing passcode",
   (await requireAdmin(signedInRequest))?.status === 503
 );
+
+section("lib/ratelimit.js");
+
+// In-memory fallback: no Upstash credentials configured.
+delete process.env.UPSTASH_REDIS_REST_URL;
+delete process.env.UPSTASH_REDIS_REST_TOKEN;
+check("rateLimitConfigured() is false without Upstash credentials", !rateLimitConfigured());
+
+const fallbackIp = "198.51.100.10";
+check("a fresh address is not throttled", (await isThrottled(fallbackIp)).blocked === false);
+for (let i = 0; i < MAX_ATTEMPTS; i++) await recordFailure(fallbackIp);
+const blockedFallback = await isThrottled(fallbackIp);
+check("an address is blocked after MAX_ATTEMPTS failures", blockedFallback.blocked === true);
+check("the fallback reports a positive Retry-After", blockedFallback.retryAfterSeconds > 0);
+check("a different address is unaffected", (await isThrottled("198.51.100.11")).blocked === false);
+await clearFailures(fallbackIp);
+check("a successful sign-in clears the counter", (await isThrottled(fallbackIp)).blocked === false);
+
+// Shared backend, exercised through a stubbed Upstash REST API.
+process.env.UPSTASH_REDIS_REST_URL = "https://fake.upstash.io";
+process.env.UPSTASH_REDIS_REST_TOKEN = "fake-token";
+check("rateLimitConfigured() is true with Upstash credentials", rateLimitConfigured());
+
+const realFetch = globalThis.fetch;
+const redisCalls = [];
+globalThis.fetch = async (url, init) => {
+  const commands = JSON.parse(init.body);
+  redisCalls.push({ url: String(url), auth: init.headers.Authorization, commands });
+  const results = commands.map(([cmd]) => {
+    if (cmd === "GET") return { result: String(MAX_ATTEMPTS + 1) };
+    if (cmd === "PTTL") return { result: 60_000 };
+    if (cmd === "INCR") return { result: 3 };
+    if (cmd === "EXPIRE") return { result: 1 };
+    if (cmd === "DEL") return { result: 1 };
+    return { result: null };
+  });
+  return { ok: true, status: 200, json: async () => results };
+};
+
+try {
+  const blockedShared = await isThrottled("203.0.113.20");
+  check("the shared backend blocks when the counter is at the limit", blockedShared.blocked === true);
+  check("the shared backend derives Retry-After from the TTL", blockedShared.retryAfterSeconds === 60);
+  check(
+    "the shared backend calls the Upstash pipeline endpoint",
+    redisCalls[0]?.url.endsWith("/pipeline")
+  );
+  check("the shared backend sends the bearer token", redisCalls[0]?.auth === "Bearer fake-token");
+
+  redisCalls.length = 0;
+  await recordFailure("203.0.113.20");
+  check(
+    "recording a failure uses INCR + a one-time EXPIRE",
+    JSON.stringify(redisCalls[0]?.commands) ===
+      JSON.stringify([
+        ["INCR", "lsc:login:203.0.113.20"],
+        ["EXPIRE", "lsc:login:203.0.113.20", "900", "NX"],
+      ]),
+    JSON.stringify(redisCalls[0]?.commands)
+  );
+
+  redisCalls.length = 0;
+  await clearFailures("203.0.113.20");
+  check("a successful sign-in DELs the shared counter", redisCalls[0]?.commands?.[0]?.[0] === "DEL");
+
+  // A cache outage must not lock admins out.
+  globalThis.fetch = async () => {
+    throw new Error("network down");
+  };
+  check(
+    "a shared-cache outage falls back instead of failing",
+    (await isThrottled("203.0.113.21")).blocked === false
+  );
+  await recordFailure("203.0.113.21"); // must not throw
+  await clearFailures("203.0.113.21"); // must not throw
+} finally {
+  globalThis.fetch = realFetch;
+  delete process.env.UPSTASH_REDIS_REST_URL;
+  delete process.env.UPSTASH_REDIS_REST_TOKEN;
+}
 
 section("api handlers (no blob store)");
 
@@ -276,6 +383,37 @@ const logout = await call("/api/auth-logout", { method: "POST", headers: { Cooki
 const clearedCookie = logout.headers.get("set-cookie") || "";
 check("POST /api/auth-logout → 200", logout.status === 200, `status ${logout.status}`);
 check("logout clears the session cookie", /__session=;/.test(clearedCookie) && /Max-Age=0/.test(clearedCookie));
+
+section("login throttle (handler, in-memory fallback)");
+
+// Repeated failures from one address must eventually be refused with a
+// Retry-After, without affecting other addresses.
+const throttledIp = "198.51.100.250";
+let lastAttemptStatus = 0;
+for (let i = 0; i < MAX_ATTEMPTS; i++) {
+  const res = await call("/api/auth-login", {
+    method: "POST",
+    headers: { ...jsonHeaders, "X-Forwarded-For": throttledIp },
+    body: JSON.stringify({ password: "wrong" }),
+  });
+  lastAttemptStatus = res.status;
+}
+check("attempts up to the limit still get 401", lastAttemptStatus === 401, `status ${lastAttemptStatus}`);
+
+const blockedLogin = await call("/api/auth-login", {
+  method: "POST",
+  headers: { ...jsonHeaders, "X-Forwarded-For": throttledIp },
+  body: JSON.stringify({ password: "wrong" }),
+});
+check("the next attempt from that address → 429", blockedLogin.status === 429, `status ${blockedLogin.status}`);
+check("429 carries Retry-After", Number(blockedLogin.headers.get("retry-after")) > 0);
+
+const otherIpLogin = await call("/api/auth-login", {
+  method: "POST",
+  headers: { ...jsonHeaders, "X-Forwarded-For": "198.51.100.251" },
+  body: JSON.stringify({ password: PASSCODE }),
+});
+check("a different address can still sign in", otherIpLogin.status === 200, `status ${otherIpLogin.status}`);
 
 await new Promise((resolve) => server.close(resolve));
 
@@ -385,6 +523,101 @@ if (!REAL_TOKEN) {
   );
 
   await new Promise((resolve) => live.close(resolve));
+}
+
+// ============================================================
+//  4. Frontend upload contract (public/js/main.js)
+// ============================================================
+//
+// The suites above call fetch() directly, so a bug in the browser helper would
+// slip through entirely. Regression being guarded: apiFetch used to force
+// `Content-Type: application/json` on EVERY request, including FormData
+// uploads. The browser must generate the multipart boundary itself, so forcing
+// JSON broke both upload forms while the JSON-only "add by link" form kept
+// working. Rather than pattern-match the source, execute apiFetch against a
+// stubbed fetch and assert what it actually sends.
+
+section("frontend upload contract (public/js/main.js)");
+{
+  const mainSrc = await readFile(join(PUBLIC_DIR, "js", "main.js"), "utf8");
+
+  const captured = [];
+  const stubFetch = async (url, init) => {
+    captured.push({ url, init });
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  const { apiFetch } = new Function("fetch", `${mainSrc}\nreturn { apiFetch };`)(stubFetch);
+
+  // Read a header defensively: a buggy apiFetch may hand fetch() a plain object
+  // literal instead of a Headers instance. Normalise rather than throwing, so a
+  // regression fails this assertion instead of crashing the whole run.
+  function readHeader(init, name) {
+    const h = init?.headers;
+    if (!h) return undefined;
+    if (typeof h.get === "function") return h.get(name);
+    if (Array.isArray(h)) {
+      const hit = h.find(([k]) => String(k).toLowerCase() === name.toLowerCase());
+      return hit ? hit[1] : undefined;
+    }
+    for (const k of Object.keys(h)) {
+      if (k.toLowerCase() === name.toLowerCase()) return h[k];
+    }
+    return undefined;
+  }
+
+  function isHeadersInstance(init) {
+    return typeof init?.headers?.get === "function";
+  }
+
+  // 1. A FormData upload must NOT get a forced Content-Type, and must be handed
+  //    to fetch as a proper Headers object.
+  const fd = new FormData();
+  fd.append("video", new File([new Uint8Array(4)], "x.mp4", { type: "video/mp4" }));
+  await apiFetch("/api/upload-video", { method: "POST", body: fd });
+  const uploadInit = captured[0].init;
+  const uploadCT = readHeader(uploadInit, "Content-Type");
+  check(
+    "apiFetch passes a Headers instance to fetch",
+    isHeadersInstance(uploadInit),
+    `got ${Object.prototype.toString.call(uploadInit?.headers)}`
+  );
+  check(
+    "FormData upload sends no forced Content-Type",
+    uploadCT == null,
+    `got ${JSON.stringify(uploadCT)}`
+  );
+  check("FormData body forwarded intact", uploadInit.body === fd);
+
+  // 2. A JSON body must still get application/json (the link form relies on it).
+  captured.length = 0;
+  await apiFetch("/api/videos", {
+    method: "POST",
+    body: JSON.stringify({ title: "t", url: "https://example.com/a.mp4" }),
+  });
+  const jsonCT = readHeader(captured[0].init, "Content-Type");
+  check(
+    "JSON body still gets application/json",
+    jsonCT === "application/json",
+    `got ${JSON.stringify(jsonCT)}`
+  );
+
+  // 3. An explicit caller-supplied Content-Type must not be clobbered.
+  captured.length = 0;
+  await apiFetch("/api/thing", {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: "raw",
+  });
+  const callerCT = readHeader(captured[0].init, "Content-Type");
+  check(
+    "caller-supplied Content-Type preserved",
+    callerCT === "text/plain",
+    `got ${JSON.stringify(callerCT)}`
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -12,9 +12,10 @@
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://*.public.blob.vercel-storage.com; media-src 'self' https://*.public.blob.vercel-storage.com; frame-src https://www.youtube-nocookie.com; connect-src 'self' https://vercel.com https://*.public.blob.vercel-storage.com"
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://*.public.blob.vercel-storage.com; media-src 'self' https://*.public.blob.vercel-storage.com; frame-src https://www.youtube-nocookie.com; connect-src 'self' https://*.public.blob.vercel-storage.com"
         }
       ]
     },
