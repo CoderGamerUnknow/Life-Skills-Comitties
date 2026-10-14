@@ -10,8 +10,8 @@
  *   - an R2 bucket backed by .dev-data/ on disk (uploads survive restarts)
  *   - static assets served from public/
  *
- * Usage:  npm run dev            (defaults to http://localhost:8787)
- *         PORT=3000 npm run dev
+ * Usage:  npm run dev:worker     (defaults to http://localhost:8787)
+ *         PORT=3000 npm run dev:worker
  *
  * Open the printed URL, go to /admin and sign in as any listed account.
  */
@@ -39,12 +39,12 @@ const PORT = Number(process.env.PORT) || 8787;
 // ============================================================
 
 const ACCOUNTS = [
-  { sub: "user-joanna", email: "joanna@example.com", name: "Joanna", role: "Head" },
+  { sub: "user-joanna", email: "joanna@example.com", name: "Joanna", role: "Admin" },
   {
     sub: "user-natasha",
     email: "natasha@example.com",
     name: "Mrs Natasha Steve",
-    role: "Mistress",
+    role: "Admin",
   },
   { sub: "user-member", email: "member@example.com", name: "Committee Member", role: "Member" },
 ];

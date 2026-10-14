@@ -21,7 +21,6 @@
     </div>
     <div class="nav-links">
       <a href="/" class="nav-link">Home</a>
-      <a href="/about.html" class="nav-link">Heads & Mistress</a>
       <a href="/members.html" class="nav-link">Members</a>
       <a href="/videos.html" class="nav-link">Video Library</a>
       <a href="/admin.html" class="nav-link active admin-link">Admin</a>
@@ -33,7 +32,7 @@
       <span class="eyebrow">Admin Panel</span>
       <h1 class="page-title">Manage Content</h1>
       <p class="page-intro">
-        Sign in with the committee passcode to upload videos and photos. This
+        Sign in with the committee passcode to add and manage videos. This
         area is locked to committee admins.
       </p>
 
@@ -102,37 +101,6 @@
           </form>
         </div>
 
-        <!-- Image upload for heads/mistress -->
-        <div class="upload-panel">
-          <h2>Upload a Photo</h2>
-          <p class="panel-desc">
-            Upload photos (up to 10 MB) for the Heads and Mistress profile cards
-            on the Heads &amp; Mistress page. Choose whether the photo is for a
-            Head or the Mistress.
-          </p>
-          <form id="image-form" class="upload-form">
-            <div class="form-row">
-              <div class="form-group">
-                <label for="image-file">Photo file</label>
-                <input type="file" id="image-file" name="image" accept="image/*" required />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="image-type">Photo type</label>
-                <select id="image-type" name="type">
-                  <option value="head">Head</option>
-                  <option value="mistress">Mistress</option>
-                </select>
-              </div>
-            </div>
-            <button type="submit" class="btn btn-primary btn-full" id="image-submit">
-              Upload Photo
-            </button>
-            <div class="form-feedback" id="image-feedback" hidden></div>
-          </form>
-        </div>
-
         <!-- Add video by link -->
         <div class="upload-panel">
           <h2>Add a Video by Link</h2>
@@ -188,18 +156,6 @@
 
       <!-- Currently uploaded content -->
       <div class="upload-panels" id="media-panels">
-        <div class="upload-panel">
-          <h2>Photos on the Site</h2>
-          <p class="panel-desc">
-            These are the images currently available for the Heads &amp; Mistress
-            page. Use the Delete button to remove one — it will disappear from the
-            site immediately.
-          </p>
-          <div class="media-list" id="images-list">
-            <div class="empty-state">No photos uploaded yet.</div>
-          </div>
-        </div>
-
         <div class="upload-panel">
           <h2>Videos on the Site</h2>
           <p class="panel-desc">

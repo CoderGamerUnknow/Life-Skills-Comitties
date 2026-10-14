@@ -2879,7 +2879,6 @@ var SESSION_PATH = "/auth/freebuff/session";
 var LOGOUT_PATH = "/auth/freebuff/logout";
 var SIGNIN_PATH = "/auth/freebuff/signin";
 var MAX_VIDEO_BYTES = 80 * 1024 * 1024;
-var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 function adminEmails(env) {
   return String(env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
 }
@@ -2889,7 +2888,6 @@ function isAdmin(session, env) {
   return emails.includes(String(session?.email || "").toLowerCase());
 }
 var VIDEO_EXTENSIONS = /* @__PURE__ */ new Set(["mp4", "webm", "mov", "m4v", "ogv"]);
-var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["jpg", "jpeg", "png", "webp", "gif", "avif"]);
 function safeExtension(originalName) {
   const ext = originalName.includes(".") ? originalName.split(".").pop().toLowerCase() : "";
   return /^[a-z0-9]{1,8}$/.test(ext) ? ext : "";
@@ -3177,41 +3175,6 @@ async function handleUploadVideo(request, env, appOrigin) {
     filename: videoFile.name
   });
 }
-async function handleUploadImage(request, env, appOrigin) {
-  const { fields, files } = await parseForm(request);
-  const imageFile = files.find((f) => f.key === "image");
-  const type = String(fields["type"] || "head").trim() || "head";
-  if (!imageFile) return json({ error: "No image file provided" }, 400);
-  if (!imageFile.type.startsWith("image/"))
-    return json({ error: "That file is not an image" }, 400);
-  if (imageFile.size > MAX_IMAGE_BYTES)
-    return json({ error: "Image is larger than the 10 MB limit" }, 413);
-  const ext = safeExtension(imageFile.name);
-  if (!IMAGE_EXTENSIONS.has(ext))
-    return json(
-      {
-        error: `Unsupported image file type. Allowed: ${[...IMAGE_EXTENSIONS].join(
-          ", "
-        )}`
-      },
-      415
-    );
-  const key = await storeInR2(
-    env.VIDEOS,
-    "images/",
-    ext,
-    imageFile.body,
-    `image/${ext === "jpg" ? "jpeg" : ext}`,
-    { type, filename: imageFile.name }
-  );
-  return json({
-    success: true,
-    key,
-    type,
-    publicUrl: publicUrl(key, appOrigin),
-    filename: imageFile.name
-  });
-}
 async function handleAddVideoLink(request, env) {
   let body;
   try {
@@ -3271,21 +3234,6 @@ async function handleListVideos(env, appOrigin) {
         addedAt
       });
     }
-  }
-  entries.sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt)));
-  return json(entries);
-}
-async function handleListImages(env, appOrigin) {
-  const entries = [];
-  for await (const entry of env.VIDEOS.list({ prefix: "images/" })) {
-    const meta = entry.customMetadata || {};
-    entries.push({
-      key: entry.key,
-      filename: meta.filename || entry.key.replace(/^images\//, ""),
-      type: meta.type || "head",
-      url: publicUrl(entry.key, appOrigin),
-      addedAt: entry.uploaded ? entry.uploaded.toISOString() : ""
-    });
   }
   entries.sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt)));
   return json(entries);
@@ -3365,10 +3313,10 @@ async function handleRequest(request, env, ctx) {
     }
     return json({ error: "Not found" }, 404);
   }
-  const PUBLIC_GETS = /* @__PURE__ */ new Set(["/api/videos", "/api/images"]);
+  const PUBLIC_GETS = /* @__PURE__ */ new Set(["/api/videos"]);
   const isPublicRead = PUBLIC_GETS.has(url.pathname) && request.method === "GET";
   const path = url.pathname;
-  const isAdminOnly = path === "/api/upload/video" && request.method === "POST" || path === "/api/upload/image" && request.method === "POST" || path === "/api/videos/link" && request.method === "POST" || path.startsWith("/api/videos/") && request.method === "DELETE" || path.startsWith("/api/images/") && request.method === "DELETE";
+  const isAdminOnly = path === "/api/upload/video" && request.method === "POST" || path === "/api/videos/link" && request.method === "POST" || path.startsWith("/api/videos/") && request.method === "DELETE";
   let session = null;
   if (url.pathname.startsWith("/api/")) {
     if (!isPublicRead) {
@@ -3404,17 +3352,11 @@ async function handleRequest(request, env, ctx) {
     if (url.pathname === "/api/upload/video" && request.method === "POST") {
       return handleUploadVideo(request, env, appOrigin);
     }
-    if (url.pathname === "/api/upload/image" && request.method === "POST") {
-      return handleUploadImage(request, env, appOrigin);
-    }
     if (url.pathname === "/api/videos/link" && request.method === "POST") {
       return handleAddVideoLink(request, env);
     }
     if (url.pathname === "/api/videos" && request.method === "GET") {
       return handleListVideos(env, appOrigin);
-    }
-    if (url.pathname === "/api/images" && request.method === "GET") {
-      return handleListImages(env, appOrigin);
     }
     if (url.pathname.startsWith("/api/videos/") && request.method === "DELETE") {
       return handleDeleteMedia(
@@ -3423,20 +3365,10 @@ async function handleRequest(request, env, ctx) {
         "videos/"
       );
     }
-    if (url.pathname.startsWith("/api/images/") && request.method === "DELETE") {
-      return handleDeleteMedia(
-        env,
-        url.pathname.slice("/api/images/".length),
-        "images/"
-      );
-    }
     return json({ error: "Not found" }, 404);
   }
   if (url.pathname.startsWith("/videos/")) {
     return streamFromR2(request, env.VIDEOS, url.pathname, "video/mp4");
-  }
-  if (url.pathname.startsWith("/images/")) {
-    return streamFromR2(request, env.VIDEOS, url.pathname, "image/jpeg");
   }
   try {
     return await env.ASSETS.fetch(request);

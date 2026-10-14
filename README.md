@@ -1,22 +1,21 @@
 # Life Skills Committee — site
 
-A small committee site with a video library and an admin panel for uploading
-videos and photos. No code edits are needed to add content.
+A small committee site with a video library and an admin panel for adding
+videos. No code edits are needed to add content.
 
 - **Frontend:** static HTML/CSS/JS in `public/` (no build step)
 - **Backend:** Vercel Functions in `api/`, shared code in `lib/`
-- **Storage:** one Vercel Blob store (videos, photos and their records)
+- **Storage:** one Vercel Blob store (videos and their records)
 - **Auth:** one shared admin passcode (`ADMIN_PASSWORD`) → signed session cookie
 
 ## Pages
 
 | Page      | Path       | Notes |
 |-----------|------------|-------|
-| Home      | `/`        | Goals, quick links, and leadership line (Head — Joanna · Mistress — Mrs Natasha Steve) |
-| Heads & Mistress | `/about` | Profile cards for Joanna and Mrs Natasha Steve (photos uploaded via admin) |
+| Home      | `/`        | Goals and quick links |
 | Members   | `/members` | Placeholder names until the final roster is confirmed |
 | Video Library | `/videos` | Videos grouped by skill category, with filter chips |
-| Admin     | `/admin`   | Sign in to upload videos/photos, add videos by link, delete content |
+| Admin     | `/admin`   | Sign in to upload videos, add videos by link, delete content |
 
 ## One-time setup
 
@@ -38,7 +37,6 @@ missing instead of an upload form.
    - **Upload a Video** — up to 200 MB (mp4, webm, mov, m4v, ogv), assigned to a
      skill category. The file goes straight from the browser to Blob storage, so
      size is no problem; long sessions are cheaper as links.
-   - **Upload a Photo** — up to 10 MB, for a *Head* or the *Mistress* card.
    - **Add a Video by Link** — YouTube or a direct `https://…/clip.mp4` URL.
 3. The lists at the bottom show what is on the site; **Delete** removes an item.
 
@@ -73,30 +71,28 @@ package: `npm run build:vendor`.
 ## Architecture notes
 
 - `public/` is copied to the CDN as-is. `vercel.json` rewrites the clean paths
-  (`/about`, `/members`, `/videos`, `/admin`) onto the real `.html` files.
+  (`/members`, `/videos`, `/admin`) onto the real `.html` files.
 - `api/*.js` are Vercel Functions using the Web `fetch` signature; each file is
   one route:
 
   | Route | Methods | Access |
   |-------|---------|--------|
   | `/api/videos` | GET, POST (link), DELETE (`?key=`) | GET public, rest admin |
-  | `/api/images` | GET, DELETE (`?key=`) | GET public, rest admin |
   | `/api/upload-video` | POST | admin |
-  | `/api/upload-image` | POST | admin |
   | `/api/auth-login` | POST | public (passcode) |
   | `/api/auth-user` | GET | session |
   | `/api/auth-logout` | POST | session |
 
 - **Uploads cannot pass through a function**: Vercel caps request bodies at
-  4.5 MB, so the browser asks `/api/upload-*` for a short-lived client token
+  4.5 MB, so the browser asks `/api/upload-video` for a short-lived client token
   (only for one exact `videos/<32 hex>.<ext>` pathname, admin-only), uploads the
   file itself directly to Blob, then calls the same endpoint again to record it.
   The API verifies the blob exists before writing the record.
-- **Records:** `data/videos/<id>.json` and `data/photos/<id>.json` hold the
-  original filename, category/type, size, URL and timestamp; media lives at
-  `videos/<id>.<ext>` and `photos/<id>.<ext>`. Records are written once and
-  deleted together with their file, so simultaneous uploads cannot clash. The
-  pages read the records, which is what makes titles and categories survive.
+- **Records:** `data/videos/<id>.json` holds the original filename, category,
+  size, URL and timestamp; media lives at `videos/<id>.<ext>`. Records are
+  written once and deleted together with their file, so simultaneous uploads
+  cannot clash. The pages read the records, which is what makes titles and
+  categories survive.
 - **Sessions:** the passcode is never stored in the browser — only an
   `HttpOnly`, `SameSite=Lax` `__session` cookie holding `<issuedAt>.<hmac>`,
   valid for 30 days. Mutating routes additionally require a same-origin request.

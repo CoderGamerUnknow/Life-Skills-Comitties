@@ -257,12 +257,7 @@ console.log("\n— Static pages —");
   const homeBody = await home.text();
   check("GET / → 200", home.status === 200, `status ${home.status}`);
   check("home has committee title", homeBody.includes("Life Skills Committee"));
-  check("home shows Head Joanna", homeBody.includes("Joanna"));
-  check("home shows Mrs Natasha Steve", homeBody.includes("Mrs Natasha Steve"));
-
-  const about = await call("/about");
-  check("GET /about → 200", about.status === 200, `status ${about.status}`);
-  check("about has team grid", (await about.text()).includes("team-grid"));
+  check("home links to the video library", homeBody.includes("videos.html"));
 
   const admin = await call("/admin");
   const adminBody = await admin.text();
@@ -277,14 +272,11 @@ console.log("\n— Static pages —");
 
 console.log("\n— Auth guards —");
 {
-  // Listing endpoints are public: the Video Library and Heads & Mistress
-  // pages are visitor-facing and must work signed-out.
+  // Listing endpoints are public: the Video Library page is visitor-facing and
+  // must work signed-out.
   const videos = await call("/api/videos");
   check("GET /api/videos unauthenticated → 200", videos.status === 200, `status ${videos.status}`);
   check("unauthenticated videos is a JSON array", Array.isArray(await videos.json()));
-
-  const images = await call("/api/images");
-  check("GET /api/images unauthenticated → 200", images.status === 200, `status ${images.status}`);
 
   // Mutations and account routes stay locked down.
   const up = await call("/api/upload/video", { method: "POST" });
@@ -475,33 +467,6 @@ let linkKey;
   check("link entry shows title", entry?.filename === "Session 1 — Communication");
 }
 
-console.log("\n— Image upload —");
-let imageKey;
-{
-  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]);
-  const fd = new FormData();
-  fd.append("image", new File([png], "joanna.png", { type: "image/png" }));
-  fd.append("type", "head");
-
-  const up = await call("/api/upload/image", { method: "POST", body: fd, headers: authHeaders });
-  const upBody = await up.json();
-  imageKey = upBody.key;
-  check("upload image → 200", up.status === 200, `status ${up.status} ${JSON.stringify(upBody)}`);
-  check("image key under images/", typeof imageKey === "string" && imageKey.startsWith("images/"), imageKey);
-
-  const list = await call("/api/images", { headers: authHeaders });
-  const listBody = await list.json();
-  check("images list includes photo", listBody.some((i) => i.key === imageKey));
-  check(
-    "images list type=head",
-    listBody.find((i) => i.key === imageKey)?.type === "head"
-  );
-
-  const res = await call("/images/" + imageKey.replace(/^images\//, ""));
-  check("GET /images/<key> → 200", res.status === 200, `status ${res.status}`);
-  check("image content-type png", res.headers.get("Content-Type") === "image/png");
-}
-
 console.log("\n— Security —");
 {
   const cross = await call("/api/upload/video", {
@@ -612,18 +577,6 @@ console.log("\n— Security —");
   });
   check("HTML extension rejected despite video/* MIME → 415", spoofed.status === 415, `status ${spoofed.status}`);
 
-  const spoofedImage = await call("/api/upload/image", {
-    method: "POST",
-    headers: authHeaders,
-    body: (() => {
-      const fd = new FormData();
-      fd.append("image", new File([new Uint8Array(4)], "evil.svg", { type: "image/png" }));
-      fd.append("type", "head");
-      return fd;
-    })(),
-  });
-  check("SVG extension rejected → 415", spoofedImage.status === 415, `status ${spoofedImage.status}`);
-
   // ---- Delete is confined to its own namespace ----
   const traversal = await call("/api/videos/..%2F..%2Findex.html", {
     method: "DELETE",
@@ -658,12 +611,6 @@ console.log("\n— Deletes —");
     headers: authHeaders,
   });
   check("DELETE link → 200", delLink.status === 200, `status ${delLink.status}`);
-
-  const delImg = await call("/api/images/" + encodeURIComponent(imageKey), {
-    method: "DELETE",
-    headers: authHeaders,
-  });
-  check("DELETE image → 200", delImg.status === 200, `status ${delImg.status}`);
 
   const list = await call("/api/videos", { headers: authHeaders });
   const listBody = await list.json();

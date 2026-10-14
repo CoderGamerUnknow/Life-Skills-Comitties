@@ -4,7 +4,7 @@
  * Env vars (injected on deploy by sites_deploy):
  *   FREEBUFF_CLIENT_ID, FREEBUFF_ISSUER, APP_ORIGIN
  *   ASSETS  — static asset binding
- *   VIDEOS  — R2 bucket binding (holds videos/, links/ and images/)
+ *   VIDEOS  — R2 bucket binding (holds videos/ and links/)
  *
  * Sign in with Freebuff (OIDC + PKCE, no client secret):
  *   - /auth/freebuff/signin?returnTo=<path>    — start login
@@ -26,7 +26,6 @@ const SIGNIN_PATH = "/auth/freebuff/signin";
 // Upload caps. Workers buffered request bodies have a ~100 MB limit on
 // hosted plans; keep headroom for multipart overhead.
 const MAX_VIDEO_BYTES = 80 * 1024 * 1024;
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 // Only accounts listed here may upload or delete content. Comma-separated
 // emails read from the ADMIN_EMAILS env var.
@@ -48,7 +47,6 @@ function isAdmin(session, env) {
 // Upload extension allowlists. The client-declared MIME type is untrusted, so
 // the content type we serve is derived from a validated extension instead.
 const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v", "ogv"]);
-const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif", "avif"]);
 
 function safeExtension(originalName) {
   const ext = originalName.includes(".")
@@ -403,46 +401,6 @@ async function handleUploadVideo(request, env, appOrigin) {
   });
 }
 
-async function handleUploadImage(request, env, appOrigin) {
-  const { fields, files } = await parseForm(request);
-  const imageFile = files.find((f) => f.key === "image");
-  const type = String(fields["type"] || "head").trim() || "head";
-
-  if (!imageFile) return json({ error: "No image file provided" }, 400);
-  if (!imageFile.type.startsWith("image/"))
-    return json({ error: "That file is not an image" }, 400);
-  if (imageFile.size > MAX_IMAGE_BYTES)
-    return json({ error: "Image is larger than the 10 MB limit" }, 413);
-
-  const ext = safeExtension(imageFile.name);
-  if (!IMAGE_EXTENSIONS.has(ext))
-    return json(
-      {
-        error: `Unsupported image file type. Allowed: ${[...IMAGE_EXTENSIONS].join(
-          ", "
-        )}`,
-      },
-      415
-    );
-
-  const key = await storeInR2(
-    env.VIDEOS,
-    "images/",
-    ext,
-    imageFile.body,
-    `image/${ext === "jpg" ? "jpeg" : ext}`,
-    { type, filename: imageFile.name }
-  );
-
-  return json({
-    success: true,
-    key,
-    type,
-    publicUrl: publicUrl(key, appOrigin),
-    filename: imageFile.name,
-  });
-}
-
 async function handleAddVideoLink(request, env) {
   let body;
   try {
@@ -510,22 +468,6 @@ async function handleListVideos(env, appOrigin) {
         addedAt,
       });
     }
-  }
-  entries.sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt)));
-  return json(entries);
-}
-
-async function handleListImages(env, appOrigin) {
-  const entries = [];
-  for await (const entry of env.VIDEOS.list({ prefix: "images/" })) {
-    const meta = entry.customMetadata || {};
-    entries.push({
-      key: entry.key,
-      filename: meta.filename || entry.key.replace(/^images\//, ""),
-      type: meta.type || "head",
-      url: publicUrl(entry.key, appOrigin),
-      addedAt: entry.uploaded ? entry.uploaded.toISOString() : "",
-    });
   }
   entries.sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt)));
   return json(entries);
@@ -632,20 +574,18 @@ async function handleRequest(request, env, ctx) {
   }
 
   // ---- API routes ----
-  // Reads of the media lists are public (the Video Library and Heads & Mistress
-  // pages are visitor-facing). /api/auth/user needs a session. Everything that
-  // mutates content additionally requires an admin account.
-  const PUBLIC_GETS = new Set(["/api/videos", "/api/images"]);
+  // Reads of the media lists are public (the Video Library page is
+  // visitor-facing). /api/auth/user needs a session. Everything that mutates
+  // content additionally requires an admin account.
+  const PUBLIC_GETS = new Set(["/api/videos"]);
   const isPublicRead = PUBLIC_GETS.has(url.pathname) && request.method === "GET";
 
   // Routes that change stored content — admin-only.
   const path = url.pathname;
   const isAdminOnly =
     (path === "/api/upload/video" && request.method === "POST") ||
-    (path === "/api/upload/image" && request.method === "POST") ||
     (path === "/api/videos/link" && request.method === "POST") ||
-    (path.startsWith("/api/videos/") && request.method === "DELETE") ||
-    (path.startsWith("/api/images/") && request.method === "DELETE");
+    (path.startsWith("/api/videos/") && request.method === "DELETE");
 
   let session = null;
   if (url.pathname.startsWith("/api/")) {
@@ -686,30 +626,17 @@ async function handleRequest(request, env, ctx) {
     if (url.pathname === "/api/upload/video" && request.method === "POST") {
       return handleUploadVideo(request, env, appOrigin);
     }
-    if (url.pathname === "/api/upload/image" && request.method === "POST") {
-      return handleUploadImage(request, env, appOrigin);
-    }
     if (url.pathname === "/api/videos/link" && request.method === "POST") {
       return handleAddVideoLink(request, env);
     }
     if (url.pathname === "/api/videos" && request.method === "GET") {
       return handleListVideos(env, appOrigin);
     }
-    if (url.pathname === "/api/images" && request.method === "GET") {
-      return handleListImages(env, appOrigin);
-    }
     if (url.pathname.startsWith("/api/videos/") && request.method === "DELETE") {
       return handleDeleteMedia(
         env,
         url.pathname.slice("/api/videos/".length),
         "videos/"
-      );
-    }
-    if (url.pathname.startsWith("/api/images/") && request.method === "DELETE") {
-      return handleDeleteMedia(
-        env,
-        url.pathname.slice("/api/images/".length),
-        "images/"
       );
     }
     return json({ error: "Not found" }, 404);
@@ -719,10 +646,6 @@ async function handleRequest(request, env, ctx) {
   if (url.pathname.startsWith("/videos/")) {
     return streamFromR2(request, env.VIDEOS, url.pathname, "video/mp4");
   }
-  if (url.pathname.startsWith("/images/")) {
-    return streamFromR2(request, env.VIDEOS, url.pathname, "image/jpeg");
-  }
-
   // ---- Static frontend ----
   try {
     return await env.ASSETS.fetch(request);

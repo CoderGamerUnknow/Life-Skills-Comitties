@@ -94,10 +94,17 @@ function renderVideos(videos) {
     const thumb = document.createElement("div");
     thumb.className = "video-thumb";
 
-    const url = new URL(v.url);
-    const isYouTube = url.hostname.includes("youtube") || url.hostname.includes("youtu");
+    // A malformed stored URL must not blank the whole grid. Fall back to a
+    // plain, non-embeddable card for that one item instead of throwing here.
+    let url = null;
+    try {
+      url = new URL(v.url);
+    } catch {
+      url = null;
+    }
+    const isYouTube = Boolean(url) && (url.hostname.includes("youtube") || url.hostname.includes("youtu"));
     const nameLower = v.filename.toLowerCase();
-    const pathLower = url.pathname.toLowerCase();
+    const pathLower = url ? url.pathname.toLowerCase() : "";
     const isDirectVideo = [".mp4", ".webm", ".mov", ".ogg"].some(
       (ext) => pathLower.endsWith(ext) || nameLower.endsWith(ext)
     );

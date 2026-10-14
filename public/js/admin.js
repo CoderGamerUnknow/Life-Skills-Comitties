@@ -6,7 +6,7 @@
  * receive more than 4.5 MB in one request — a video could never be proxied
  * through the API. The API hands the browser a short-lived, admin-only token for
  * one exact pathname; afterwards the panel tells the API to record the upload so
- * it shows up in the Video Library / Heads & Mistress page.
+ * it shows up in the Video Library.
  *
  * Runs as an ES module so it can import that helper; everything it calls
  * (apiFetch, toast, escapeHtml, applyAuthGate, signInWithPassword, signOut) is
@@ -22,13 +22,6 @@ const VIDEO = {
   limitHint: "For longer videos, use “Add a Video by Link” instead.",
 };
 
-const PHOTO = {
-  folder: "photos",
-  extensions: ["jpg", "jpeg", "png", "webp", "gif", "avif"],
-  maxBytes: 10 * 1024 * 1024,
-  limitHint: "Try resizing the photo before uploading.",
-};
-
 // Above this size the helper splits the file into parts and retries failures.
 const MULTIPART_OVER_BYTES = 20 * 1024 * 1024;
 
@@ -40,9 +33,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const signOutBtn = document.getElementById("sign-out-btn");
   const adminContent = document.getElementById("admin-content");
   const videoForm = document.getElementById("video-form");
-  const imageForm = document.getElementById("image-form");
   const linkForm = document.getElementById("link-form");
-  const imagesList = document.getElementById("images-list");
   const videosList = document.getElementById("videos-list");
 
   if (!statusEl || !actionsEl) return;
@@ -63,7 +54,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Load media lists (only if signed in)
   if (signedIn) {
-    loadImagesList(imagesList);
     loadVideosList(videosList);
   }
 
@@ -129,47 +119,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         videoForm.reset();
         loadVideosList(videosList);
         toast(`Video uploaded — ${category}`, "success");
-      }
-    });
-  }
-
-  // Photo upload
-  if (imageForm) {
-    imageForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const fileInput = document.getElementById("image-file");
-      const typeSelect = document.getElementById("image-type");
-      const feedback = document.getElementById("image-feedback");
-      const submit = document.getElementById("image-submit");
-      if (!fileInput || !typeSelect || !feedback || !submit) return;
-
-      const file = fileInput.files && fileInput.files[0];
-      if (!file) {
-        showFeedback(feedback, "Please select an image file.", "error");
-        return;
-      }
-      const type = typeSelect.value === "mistress" ? "mistress" : "head";
-
-      const uploaded = await runSubmit({
-        button: submit,
-        feedback,
-        idleLabel: "Upload Photo",
-        work: async (setBusy) => {
-          await uploadFile({
-            config: PHOTO,
-            file,
-            endpoint: "/api/upload-image",
-            payload: { filename: file.name, type },
-            setBusy,
-          });
-        },
-      });
-
-      if (uploaded) {
-        showFeedback(feedback, `Uploaded “${file.name}” (${type}).`, "success");
-        imageForm.reset();
-        loadImagesList(imagesList);
-        toast(`Photo uploaded — ${type}`, "success");
       }
     });
   }
@@ -254,14 +203,24 @@ async function uploadFile({ config, file, endpoint, payload, setBusy }) {
   const id = randomId();
   const pathname = `${config.folder}/${id}.${extension}`;
 
-  const blob = await upload(pathname, file, {
-    access: "public",
-    handleUploadUrl: endpoint,
-    contentType: file.type || undefined,
-    multipart: file.size > MULTIPART_OVER_BYTES,
-    clientPayload: JSON.stringify(payload),
-    onUploadProgress: ({ percentage }) => setBusy(`Uploading… ${percentage}%`),
-  });
+  let blob;
+  try {
+    blob = await upload(pathname, file, {
+      access: "public",
+      handleUploadUrl: endpoint,
+      contentType: file.type || undefined,
+      multipart: file.size > MULTIPART_OVER_BYTES,
+      clientPayload: JSON.stringify(payload),
+      onUploadProgress: ({ percentage }) => setBusy(`Uploading… ${percentage}%`),
+    });
+  } catch (error) {
+    // The blob client reports a generic "Failed to retrieve the client token"
+    // when the token step fails, hiding the server's reason (store not
+    // connected, session expired, …). Ask the endpoint directly so the admin
+    // sees something actionable.
+    const reason = await explainUploadFailure(endpoint, pathname, payload);
+    throw new Error(reason || error?.message || "Upload failed.");
+  }
 
   try {
     await apiFetch(endpoint, {
@@ -280,73 +239,33 @@ async function uploadFile({ config, file, endpoint, payload, setBusy }) {
   }
 }
 
+/**
+ * Ask the upload endpoint why it refused a token, so the panel can show the
+ * server's own explanation instead of the client helper's generic message.
+ * @returns {Promise<string>} a human-readable reason, or "" if unavailable
+ */
+async function explainUploadFailure(endpoint, pathname, payload) {
+  try {
+    const res = await fetch(apiPath(endpoint), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "blob.generate-client-token",
+        payload: { pathname, clientPayload: JSON.stringify(payload), multipart: false },
+      }),
+    });
+    if (res.ok) return "";
+    const body = await res.json().catch(() => null);
+    return body?.error || `The server refused the upload (status ${res.status}).`;
+  } catch {
+    return "";
+  }
+}
+
 function randomId() {
   if (crypto.randomUUID) return crypto.randomUUID().replace(/-/g, "");
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-/** Render the images list with delete buttons. */
-async function loadImagesList(listEl) {
-  if (!listEl) return;
-  let images = [];
-  try {
-    // fresh=1 skips the short-lived public CDN cache, so a just-uploaded photo
-    // is visible straight away.
-    images = await apiFetch("/api/images?fresh=1");
-  } catch {
-    images = [];
-  }
-
-  listEl.innerHTML = "";
-  if (images.length === 0) {
-    listEl.innerHTML = `<div class="empty-state">No photos uploaded yet.</div>`;
-    return;
-  }
-
-  for (const img of images) {
-    const item = document.createElement("div");
-    item.className = "media-item";
-
-    const thumb = document.createElement("div");
-    thumb.className = "media-item-thumb";
-    const thumbImg = document.createElement("img");
-    thumbImg.src = img.url;
-    thumbImg.alt = img.filename;
-    thumbImg.loading = "lazy";
-    thumbImg.onerror = () => {
-      thumb.classList.add("video");
-      thumb.innerHTML = "🖼";
-      thumbImg.remove();
-    };
-    thumb.appendChild(thumbImg);
-
-    const info = document.createElement("div");
-    info.className = "media-item-info";
-    info.innerHTML = `
-      <div class="media-name">${escapeHtml(img.filename)}</div>
-      <div class="media-meta">${escapeHtml(img.type === "mistress" ? "Mistress" : "Head")} · ${escapeHtml(addedLabel(img.addedAt))}</div>
-    `;
-
-    const del = document.createElement("button");
-    del.className = "btn-danger";
-    del.textContent = "Delete";
-    del.addEventListener("click", async () => {
-      if (!confirm(`Delete "${img.filename}"?`)) return;
-      try {
-        await apiFetch(`/api/images?key=${encodeURIComponent(img.key)}`, { method: "DELETE" });
-        loadImagesList(listEl);
-        toast("Photo deleted.", "info");
-      } catch (err) {
-        toast("Delete failed: " + err.message, "error");
-      }
-    });
-
-    item.appendChild(thumb);
-    item.appendChild(info);
-    item.appendChild(del);
-    listEl.appendChild(item);
-  }
 }
 
 /** Render the videos list with delete buttons. */

@@ -23,7 +23,6 @@ import {
   mediaPathname,
   newId,
   parseMediaPathname,
-  toPublicPhoto,
   toPublicVideo,
 } from "../lib/media.js";
 import { issueSession, isSignedIn, passcodeMatches, requireAdmin } from "../lib/auth.js";
@@ -70,15 +69,11 @@ check(
   "mediaPathname() lowercases the extension",
   mediaPathname("video", id, "MP4") === `videos/${id}.mp4`
 );
-check(
-  "mediaPathname() uses photos/ for photos",
-  mediaPathname("photo", id, "png") === `photos/${id}.png`
-);
 
 const parsed = parseMediaPathname("video", `videos/${id}.mp4`);
 check("parseMediaPathname() round-trips", parsed?.id === id && parsed?.extension === "mp4");
 check("parseMediaPathname() accepts webm", !!parseMediaPathname("video", `videos/${id}.webm`));
-check("parseMediaPathname() rejects other folders", !parseMediaPathname("video", `photos/${id}.mp4`));
+check("parseMediaPathname() rejects other folders", !parseMediaPathname("video", `other/${id}.mp4`));
 check("parseMediaPathname() rejects unknown extensions", !parseMediaPathname("video", `videos/${id}.exe`));
 check("parseMediaPathname() rejects non-hex ids", !parseMediaPathname("video", "videos/nope.mp4"));
 check(
@@ -89,9 +84,8 @@ check(
   "parseMediaPathname() rejects nested paths",
   !parseMediaPathname("video", `videos/${id}.mp4/extra`)
 );
-check("photo pathnames never parse as videos", !parseMediaPathname("video", `photos/${id}.png`));
-check("isExtensionAllowed() is case-insensitive", isExtensionAllowed("photo", "JPG"));
-check("isExtensionAllowed() rejects .mp4 photos", !isExtensionAllowed("photo", "mp4"));
+check("isExtensionAllowed() is case-insensitive", isExtensionAllowed("video", "MP4"));
+check("isExtensionAllowed() rejects images", !isExtensionAllowed("video", "png"));
 
 check("cleanText() collapses whitespace", cleanText("  Communication \n skills ", 60) === "Communication skills");
 check("cleanText() caps the length", cleanText("x".repeat(120), 60).length === 60);
@@ -135,14 +129,6 @@ check(
   "toPublicVideo() defaults a missing category",
   toPublicVideo({ ...fileRecord, category: undefined }).category === "General"
 );
-
-const publicPhoto = toPublicPhoto({ id, filename: "joanna.jpg", type: "mistress", url: "https://x.test/p.jpg" });
-check("toPublicPhoto() keeps the mistress type", publicPhoto.type === "mistress");
-check(
-  "toPublicPhoto() defaults unknown types to head",
-  toPublicPhoto({ id, url: "https://x.test/p.jpg", type: "weird" }).type === "head"
-);
-check("toPublicPhoto() drops records without a url", toPublicPhoto({ id }) === null);
 
 // ============================================================
 //  2. Auth + handler behaviour
@@ -208,9 +194,6 @@ check(
   "GET /api/videos?fresh=1 bypasses the cache",
   (freshVideos.headers.get("Cache-Control") || "") === "no-store"
 );
-
-const imagesEmpty = await call("/api/images");
-check("GET /api/images → 200 []", imagesEmpty.status === 200 && JSON.stringify(await imagesEmpty.json()) === "[]");
 
 const noSession = await call("/api/auth-user");
 check("GET /api/auth-user without a session → 401", noSession.status === 401, `status ${noSession.status}`);

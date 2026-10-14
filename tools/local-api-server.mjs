@@ -9,7 +9,7 @@
  * With a blob token in .env.local this is a true end-to-end environment: the
  * browser uploads to the real store through the real API.
  *
- * Usage: npm run dev:api        (then open http://localhost:3000/admin.html)
+ * Usage: npm run dev            (then open http://localhost:3000/admin)
  *        node tools/local-api-server.mjs 4000
  */
 
@@ -23,7 +23,6 @@ const PUBLIC_DIR = join(ROOT, "public");
 
 /** Mirrors the rewrites in vercel.json. */
 const REWRITES = {
-  "/about": "/about.html",
   "/members": "/members.html",
   "/videos": "/videos.html",
   "/admin": "/admin.html",
@@ -34,9 +33,7 @@ const API_ROUTES = [
   "auth-logout",
   "auth-user",
   "videos",
-  "images",
   "upload-video",
-  "upload-image",
 ];
 
 const CONTENT_TYPES = {
